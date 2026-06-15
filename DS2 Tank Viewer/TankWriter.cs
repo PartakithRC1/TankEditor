@@ -1,4 +1,4 @@
-using ICSharpCode.SharpZipLib.Zip.Compression;
+﻿using ICSharpCode.SharpZipLib.Zip.Compression;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,84 +8,43 @@ using static DS2_Tank_Viewer.TankReader;
 
 namespace DS2_Tank_Viewer
 {
-    /// <summary>
-    /// Writes DS2-compatible .ds2res Tank files.
-    ///
-    /// Key layout rules (from TankStructure.h):
-    ///
-    ///  [Header]
-    ///  [DirSet]
-    ///    DWORD count
-    ///    DWORD offsets[count]          ← DSO = relative to start of DirSet
-    ///    DirEntry bodies (variable size, each dword-aligned)
-    ///  [FileSet]
-    ///    DWORD count
-    ///    DWORD offsets[count]          ← FSO = relative to start of FileSet
-    ///    FileEntry bodies (variable size)
-    ///      ↳ optional CompressedHeader + ChunkHeaders immediately after NSTRING name
-    ///  [Data section]
-    ///    raw / compressed file bytes
-    ///    FileEntry.Offset = offset from start of data section (NOT absolute)
-    ///
-    /// All header offset fields (DirSetOffset, FileSetOffset, DataOffset) are
-    /// relative to the start of the Header (= start of file).
-    /// </summary>
     public class TankWriter
     {
-        // ── internal state ───────────────────────────────────────────────────
-
         private TankHeader _header;
-
-        // Directories keyed by their canonical path (e.g. "ui/hud")
         private readonly List<WriterDirEntry> _dirs = new List<WriterDirEntry>();
         private readonly List<WriterFileEntry> _files = new List<WriterFileEntry>();
-
-        // Maps canonical path → index in _dirs
-        private readonly Dictionary<string, int> _pathToDirIndex =
-            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-        // Accumulated compressed/raw file data
+        private readonly Dictionary<string, int> _pathToDirIndex = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly List<byte> _dataBuffer = new List<byte>();
-
-        // ── internal models ──────────────────────────────────────────────────
 
         private class WriterDirEntry
         {
-            public string CanonicalPath { get; set; } = "";  // e.g. "ui/hud"
-            public string Name { get; set; } = "";  // leaf name
-            public int ParentIndex { get; set; } = -1;  // -1 = root
-            public FileTime FileTime { get; set; }
+            public string CanonicalPath = "";
+            public string Name = "";
+            public int ParentIndex = -1;
+            public FileTime FileTime;
             public List<int> ChildDirIndices = new List<int>();
             public List<int> ChildFileIndices = new List<int>();
-
-            // Filled in during serialization
-            public uint DSOOffset { get; set; }  // relative to DirSet base
+            public uint DSOOffset;
         }
 
         private class WriterFileEntry
         {
-            public string Name { get; set; } = "";
-            public int DirIndex { get; set; } = 0;
-            public uint Size { get; set; }      // uncompressed
-            public uint DataOffset { get; set; }      // offset from start of data section
-            public uint Crc32 { get; set; }
-            public FileTime FileTime { get; set; }
-            public ushort Format { get; set; }      // 0=Raw 1=Zlib 2=Lzo
-            public ushort Flags { get; set; }
-            public CompressedHeader CompressedInfo { get; set; }
-
+            public string Name = "";
+            public int DirIndex;
+            public uint Size;
+            public uint DataOffset;
+            public uint Crc32;
+            public FileTime FileTime;
+            public ushort Format;
+            public ushort Flags;
+            public CompressedHeader CompressedInfo;
             public bool IsCompressed => Format != 0;
-
-            // Filled in during serialization
-            public uint FSOOffset { get; set; }  // relative to FileSet base
+            public uint FSOOffset;
         }
-
-        // ── ctor ─────────────────────────────────────────────────────────────
 
         public TankWriter()
         {
             InitHeader();
-            // Root directory (index 0, parentIndex -1, empty name)
             _dirs.Add(new WriterDirEntry
             {
                 CanonicalPath = "",
@@ -96,20 +55,13 @@ namespace DS2_Tank_Viewer
             _pathToDirIndex[""] = 0;
         }
 
-        // ── public API ───────────────────────────────────────────────────────
-
         public void SetTitle(string title) => _header.TitleText = title;
         public void SetAuthor(string author) => _header.AuthorText = author;
         public void SetCopyright(string text) => _header.CopyrightText = text;
         public void SetDescription(string text) => _header.DescriptionText = text;
 
-        /// <summary>
-        /// Add a file at the given virtual path (forward- or back-slash, relative).
-        /// e.g. "ui\\hud\\bar.gas" or "ui/hud/bar.gas"
-        /// </summary>
         public void AddFile(string virtualPath, byte[] data, bool compress = true)
         {
-            // Normalise to forward slashes, strip leading separator
             virtualPath = virtualPath.Replace('\\', '/').TrimStart('/');
             if (string.IsNullOrEmpty(virtualPath))
                 throw new ArgumentException("Empty virtual path");
@@ -117,6 +69,8 @@ namespace DS2_Tank_Viewer
             int lastSlash = virtualPath.LastIndexOf('/');
             string dirPath = lastSlash >= 0 ? virtualPath.Substring(0, lastSlash) : "";
             string fileName = lastSlash >= 0 ? virtualPath.Substring(lastSlash + 1) : virtualPath;
+            fileName = fileName.ToLowerInvariant();
+            dirPath = dirPath.ToLowerInvariant();
 
             int dirIndex = EnsureDirectory(dirPath);
 
@@ -132,77 +86,114 @@ namespace DS2_Tank_Viewer
 
             if (compress && data.Length > 0)
             {
-                entry.Format = 1;  // Zlib
-                entry.CompressedInfo = CompressChunked(data, 16384);
+                entry.Format = 1; // DATAFORMAT_ZLIB (raw deflate)
+                entry.CompressedInfo = CompressRawDeflate(data);
             }
             else
             {
-                entry.Format = 0;  // Raw
+                entry.Format = 0; // RAW
                 _dataBuffer.AddRange(data);
+                AlignDataBuffer();
             }
 
-            int fileIndex = _files.Count;
             _files.Add(entry);
-            _dirs[dirIndex].ChildFileIndices.Add(fileIndex);
+            _dirs[dirIndex].ChildFileIndices.Add(_files.Count - 1);
         }
 
-        /// <summary>Serialise and write the tank to disk.</summary>
         public void Save(string filePath)
         {
-            // ── 1. Serialise DirSet into a MemoryStream ──────────────────────
-            //
-            // Layout:
-            //   DWORD  count
-            //   DWORD  offsets[count]      ← DSO: relative to start of DirSet
-            //   ... DirEntry bodies ...    ← bodies start immediately after offset table
-            //
-            // We do two passes:
-            //   Pass A: write all bodies to measure their sizes → compute DSO offsets
-            //   Pass B: write count + offset table + bodies to the real MemoryStream
+            SortFileSet();
+            SerializeDirectoriesAndFiles(out byte[] dirSetData, out byte[] fileSetData);
+            WriteTankFile(filePath, dirSetData, fileSetData);
+        }
 
-            // Pass A – measure bodies
-            var dirBodyBytes = new byte[_dirs.Count][];
-            for (int i = 0; i < _dirs.Count; i++)
-                dirBodyBytes[i] = SerializeDirEntry(i, placeholder: true);
+        // ---------------------------------------------------------------------
+        // Compression: RAW DEFLATE (no zlib header, no adler32)
+        // ---------------------------------------------------------------------
+        private CompressedHeader CompressRawDeflate(byte[] data)
+        {
+            var deflater = new Deflater(Deflater.BEST_COMPRESSION, noZlibHeaderOrFooter: true);
+            deflater.SetInput(data);
+            deflater.Finish();
 
-            // Compute DSO offsets for each DirEntry body.
-            // The body array starts at:
-            //   sizeof(DWORD)              [count field]
-            //   + sizeof(DWORD)*count      [offset table]
-            uint bodiesStart = (uint)(4 + 4 * _dirs.Count);
-            var dsoOffsets = new uint[_dirs.Count];
-            uint runningOffset = bodiesStart;
-            for (int i = 0; i < _dirs.Count; i++)
+            byte[] buffer = new byte[data.Length + 12];
+            int compSize = deflater.Deflate(buffer);
+            byte[] compressed = new byte[compSize];
+            Array.Copy(buffer, compressed, compSize);
+
+            _dataBuffer.AddRange(compressed);
+            AlignDataBuffer();
+
+            return new CompressedHeader
             {
-                dsoOffsets[i] = runningOffset;
-                _dirs[i].DSOOffset = runningOffset;
-                runningOffset += (uint)dirBodyBytes[i].Length;
+                ChunkSize = 0,
+                CompressedSize = (uint)compSize,
+                Chunks = new List<CompressedChunk>()
+            };
+        }
+
+        private void AlignDataBuffer()
+        {
+            int align = 8;
+            int pad = (align - (_dataBuffer.Count % align)) % align;
+            for (int i = 0; i < pad; i++) _dataBuffer.Add(0);
+        }
+
+        // ---------------------------------------------------------------------
+        // Sorting & Serialisation
+        // ---------------------------------------------------------------------
+        private void SortFileSet()
+        {
+            var sorted = _files.Select((f, i) => new { f, i })
+                               .OrderBy(x => x.f.Name)
+                               .ToList();
+            var oldToNew = new int[_files.Count];
+            for (int newIdx = 0; newIdx < sorted.Count; newIdx++)
+                oldToNew[sorted[newIdx].i] = newIdx;
+
+            foreach (var dir in _dirs)
+            {
+                for (int j = 0; j < dir.ChildFileIndices.Count; j++)
+                    dir.ChildFileIndices[j] = oldToNew[dir.ChildFileIndices[j]];
             }
 
-            // Pass B – now that we know all DSO offsets, re-serialise bodies
-            // (they embed ParentOffset and ChildOffsets which are DSO values)
-            for (int i = 0; i < _dirs.Count; i++)
-                dirBodyBytes[i] = SerializeDirEntry(i, placeholder: false);
+            _files.Clear();
+            _files.AddRange(sorted.Select(x => x.f));
+        }
 
-            var dirSetMs = new MemoryStream();
-            using (var w = new BinaryWriter(dirSetMs, Encoding.UTF8, leaveOpen: true))
+        private void SerializeDirectoriesAndFiles(out byte[] dirSetData, out byte[] fileSetData)
+        {
+            // ---- Directory Set ----
+            var dirBody = new byte[_dirs.Count][];
+            for (int i = 0; i < _dirs.Count; i++)
+                dirBody[i] = SerializeDirEntry(i, placeholder: true);
+
+            uint bodiesStart = (uint)(4 + 4 * _dirs.Count);
+            var dsoOffsets = new uint[_dirs.Count];
+            uint running = bodiesStart;
+            for (int i = 0; i < _dirs.Count; i++)
+            {
+                dsoOffsets[i] = running;
+                _dirs[i].DSOOffset = running;
+                running += (uint)dirBody[i].Length;
+            }
+
+            for (int i = 0; i < _dirs.Count; i++)
+                dirBody[i] = SerializeDirEntry(i, placeholder: false);
+
+            using (var ms = new MemoryStream())
+            using (var w = new BinaryWriter(ms))
             {
                 w.Write((uint)_dirs.Count);
                 foreach (uint off in dsoOffsets) w.Write(off);
-                foreach (var body in dirBodyBytes) w.Write(body);
+                foreach (var body in dirBody) w.Write(body);
+                dirSetData = ms.ToArray();
             }
-            byte[] dirSetData = dirSetMs.ToArray();
 
-            // ── 2. Serialise FileSet ─────────────────────────────────────────
-            //
-            // Layout:
-            //   DWORD  count
-            //   DWORD  offsets[count]      ← FSO: relative to start of FileSet
-            //   ... FileEntry bodies ...
-
-            var fileBodyBytes = new byte[_files.Count][];
+            // ---- File Set ----
+            var fileBody = new byte[_files.Count][];
             for (int i = 0; i < _files.Count; i++)
-                fileBodyBytes[i] = SerializeFileEntry(i, placeholder: true);
+                fileBody[i] = SerializeFileEntry(i, placeholder: true);
 
             uint fileBodyStart = (uint)(4 + 4 * _files.Count);
             var fsoOffsets = new uint[_files.Count];
@@ -211,134 +202,65 @@ namespace DS2_Tank_Viewer
             {
                 fsoOffsets[i] = fileRunning;
                 _files[i].FSOOffset = fileRunning;
-                fileRunning += (uint)fileBodyBytes[i].Length;
+                fileRunning += (uint)fileBody[i].Length;
             }
 
-            // Re-serialise file entries (ParentOffset is a DSO value now known)
             for (int i = 0; i < _files.Count; i++)
-                fileBodyBytes[i] = SerializeFileEntry(i, placeholder: false);
+                fileBody[i] = SerializeFileEntry(i, placeholder: false);
 
-            var fileSetMs = new MemoryStream();
-            using (var w = new BinaryWriter(fileSetMs, Encoding.UTF8, leaveOpen: true))
+            using (var ms = new MemoryStream())
+            using (var w = new BinaryWriter(ms))
             {
                 w.Write((uint)_files.Count);
                 foreach (uint off in fsoOffsets) w.Write(off);
-                foreach (var body in fileBodyBytes) w.Write(body);
-            }
-            byte[] fileSetData = fileSetMs.ToArray();
-
-            // ── 3. Compute header offsets ────────────────────────────────────
-            //
-            // DS2 on-disk layout (confirmed from working .ds2res):
-            //   [Header + RAW_HEADER_PAD] [Data] [DirSet] [FileSet]
-            //
-            // RAW_HEADER_PAD (16 bytes) is already baked into SerializeHeader().
-            // DATA_SECTION_ALIGNMENT (4KB) only applies to RAW-format tanks.
-            // For compressed tanks (Zlib/Lzo), DataOffset = headerSize with no extra padding.
-            //
-            // DataOffset   = exact size of serialised header (804 bytes for DS2)
-            // DirSetOffset = DataOffset + total compressed data bytes
-            // FileSetOffset= DirSetOffset + DirSet size
-            // IndexSize    = DirSet size + FileSet size
-
-            byte[] headerPlaceholder = SerializeHeader(_header);
-            uint headerSize = (uint)headerPlaceholder.Length;  // 804 for DS2
-            uint dataOffset = headerSize;                       // data immediately follows header
-            uint dirSetOffset = dataOffset + (uint)_dataBuffer.Count;
-            uint fileSetOffset = dirSetOffset + (uint)dirSetData.Length;
-            uint indexSize = (uint)(dirSetData.Length + fileSetData.Length);
-
-            // ── 4. Compute CRCs ──────────────────────────────────────────────
-            // IndexCRC32 = CRC over DirSet + FileSet bytes (not the header)
-            // DataCRC32  = CRC over the raw data bytes
-            byte[] indexForCrc = dirSetData.Concat(fileSetData).ToArray();
-            uint indexCrc = Crc32(indexForCrc);
-            uint dataCrc = _dataBuffer.Count > 0 ? Crc32(_dataBuffer.ToArray()) : 0;
-
-            // ── 5. Finalise header ───────────────────────────────────────────
-            _header.DirSetOffset = dirSetOffset;
-            _header.FileSetOffset = fileSetOffset;
-            _header.DataOffset = dataOffset;
-            _header.IndexSize = indexSize;
-            _header.IndexCrc32 = indexCrc;
-            _header.DataCrc32 = dataCrc;
-
-            byte[] headerData = SerializeHeader(_header);
-
-            // ── 6. Write file: [Header+pad][Data][DirSet][FileSet] ───────────
-            using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
-            using (var writer = new BinaryWriter(fs))
-            {
-                writer.Write(headerData);             // 804 bytes (includes RAW_HEADER_PAD)
-                writer.Write(_dataBuffer.ToArray());  // data section
-                writer.Write(dirSetData);             // DirSet
-                writer.Write(fileSetData);            // FileSet
+                foreach (var body in fileBody) w.Write(body);
+                fileSetData = ms.ToArray();
             }
         }
 
-        // ── serialisation helpers ────────────────────────────────────────────
-
-        /// <summary>
-        /// Serialise one DirEntry body (not including the offset-table slot).
-        /// When placeholder=true, DSO offsets in ParentOffset / ChildOffsets are 0.
-        /// </summary>
         private byte[] SerializeDirEntry(int index, bool placeholder)
         {
             var dir = _dirs[index];
             using (var ms = new MemoryStream())
             using (var w = new BinaryWriter(ms))
             {
-                // ParentOffset = DSO of parent DirEntry, 0 for root
-                uint parentDso = 0;
-                if (!placeholder && dir.ParentIndex >= 0)
-                    parentDso = _dirs[dir.ParentIndex].DSOOffset;
+                uint parentDso = (!placeholder && dir.ParentIndex >= 0) ? _dirs[dir.ParentIndex].DSOOffset : 0;
                 w.Write(parentDso);
-
-                // ChildCount = dirs + files (the engine distinguishes by range comparison)
-                uint childCount = (uint)(dir.ChildDirIndices.Count + dir.ChildFileIndices.Count);
-                w.Write(childCount);
-
+                w.Write((uint)(dir.ChildDirIndices.Count + dir.ChildFileIndices.Count));
                 w.Write(dir.FileTime.LowDateTime);
                 w.Write(dir.FileTime.HighDateTime);
-
                 WriteNString(w, dir.Name);
 
-                // Child offsets: dir children (DSO) first, then file children (FSO)
-                // The engine uses range-overlap with the FileSet/DirSet to tell them apart.
-                // Here we write DSO for dirs, FSO for files — same convention as the reader.
+                var children = new List<(string Name, bool IsFile, int Index)>();
+                foreach (int ci in dir.ChildDirIndices) children.Add((_dirs[ci].Name, false, ci));
+                foreach (int fi in dir.ChildFileIndices) children.Add((_files[fi].Name, true, fi));
+                children = children.OrderBy(c => c.Name).ToList();
+
                 if (!placeholder)
                 {
-                    foreach (int ci in dir.ChildDirIndices)
-                        w.Write(_dirs[ci].DSOOffset);
-                    foreach (int fi in dir.ChildFileIndices)
-                        w.Write(_files[fi].FSOOffset);
+                    foreach (var child in children)
+                    {
+                        w.Write(child.IsFile ? _files[child.Index].FSOOffset : _dirs[child.Index].DSOOffset);
+                    }
                 }
                 else
                 {
-                    for (int c = 0; c < childCount; c++)
-                        w.Write(0U);
+                    for (int i = 0; i < children.Count; i++) w.Write(0U);
                 }
-
                 return ms.ToArray();
             }
         }
 
-        /// <summary>
-        /// Serialise one FileEntry body (not including the offset-table slot).
-        /// FileEntry.Offset = offset from start of data section (NOT absolute).
-        /// </summary>
         private byte[] SerializeFileEntry(int index, bool placeholder)
         {
             var file = _files[index];
             using (var ms = new MemoryStream())
             using (var w = new BinaryWriter(ms))
             {
-                // ParentOffset = DSO of parent DirEntry
                 uint parentDso = placeholder ? 0 : _dirs[file.DirIndex].DSOOffset;
                 w.Write(parentDso);
-
-                w.Write(file.Size);             // uncompressed size
-                w.Write(file.DataOffset);       // offset from start of data section
+                w.Write(file.Size);
+                w.Write(file.DataOffset);
                 w.Write(file.Crc32);
                 w.Write(file.FileTime.LowDateTime);
                 w.Write(file.FileTime.HighDateTime);
@@ -346,24 +268,96 @@ namespace DS2_Tank_Viewer
                 w.Write(file.Flags);
                 WriteNString(w, file.Name);
 
-                // Optional compressed header immediately follows the name NSTRING
                 if (file.IsCompressed && file.CompressedInfo != null)
                 {
                     var ci = file.CompressedInfo;
                     w.Write(ci.CompressedSize);
                     w.Write(ci.ChunkSize);
-                    // NumChunks is NOT written — it's computed by the reader as ceil(Size/ChunkSize)
                     foreach (var chunk in ci.Chunks)
                     {
                         w.Write(chunk.UncompressedSize);
                         w.Write(chunk.CompressedSize);
                         w.Write(chunk.ExtraBytes);
-                        w.Write(chunk.Offset);  // offset from start of data section
+                        w.Write(chunk.Offset);
                     }
                 }
-
                 return ms.ToArray();
             }
+        }
+
+        private void WriteTankFile(string path, byte[] dirSetData, byte[] fileSetData)
+        {
+            byte[] headerRaw = SerializeHeader(_header);
+            uint headerSize = (uint)headerRaw.Length;
+            uint dataOffset = (uint)AlignUp((int)headerSize, 4096);
+            int headerPad = (int)(dataOffset - headerSize);
+
+            uint dataEnd = dataOffset + (uint)_dataBuffer.Count;
+            uint dirSetOffset = (uint)AlignUp((int)dataEnd, 4096);
+            int dataPad = (int)(dirSetOffset - dataEnd);
+            for (int i = 0; i < dataPad; i++) _dataBuffer.Add(0);
+
+            uint fileSetOffset = dirSetOffset + (uint)dirSetData.Length;
+            uint indexSize = (uint)(dirSetData.Length + fileSetData.Length);
+
+            byte[] indexForCrc = dirSetData.Concat(fileSetData).ToArray();
+            _header.IndexCrc32 = Crc32(indexForCrc);
+            _header.DataCrc32 = _dataBuffer.Count > 0 ? Crc32(_dataBuffer.ToArray()) : 0;
+            _header.DirSetOffset = dirSetOffset;
+            _header.FileSetOffset = fileSetOffset;
+            _header.DataOffset = dataOffset;
+            _header.IndexSize = indexSize;
+
+            byte[] finalHeader = SerializeHeader(_header);
+
+            using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write))
+            using (var w = new BinaryWriter(fs))
+            {
+                w.Write(finalHeader);
+                for (int i = 0; i < headerPad; i++) w.Write((byte)0);
+                w.Write(_dataBuffer.ToArray());
+                w.Write(dirSetData);
+                w.Write(fileSetData);
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // String serialisation (with null terminator and DWORD padding)
+        // ---------------------------------------------------------------------
+        private void WriteNString(BinaryWriter w, string str)
+        {
+            if (str == null) str = "";
+            byte[] ascii = Encoding.ASCII.GetBytes(str);
+            ushort len = (ushort)ascii.Length;
+            w.Write(len);
+            if (len > 0) w.Write(ascii);
+            w.Write((byte)0); // null terminator
+            int total = 2 + len + 1;
+            int pad = AlignUp(total, 4) - total;
+            for (int i = 0; i < pad; i++) w.Write((byte)0);
+        }
+
+        private void WriteWideFixed(BinaryWriter w, string str, int maxChars)
+        {
+            if (str == null) str = "";
+            if (str.Length >= maxChars) str = str.Substring(0, maxChars - 1);
+            byte[] bytes = Encoding.Unicode.GetBytes(str);
+            byte[] buffer = new byte[maxChars * 2];
+            Array.Copy(bytes, buffer, bytes.Length);
+            w.Write(buffer);
+        }
+
+        private void WriteWideNString(BinaryWriter w, string str)
+        {
+            if (str == null) str = "";
+            byte[] wide = Encoding.Unicode.GetBytes(str);
+            ushort lenChars = (ushort)(wide.Length / 2);
+            w.Write(lenChars);
+            if (lenChars > 0) w.Write(wide);
+            w.Write((ushort)0); // wide null terminator
+            int total = 2 + (lenChars * 2) + 2;
+            int pad = AlignUp(total, 4) - total;
+            for (int i = 0; i < pad; i++) w.Write((byte)0);
         }
 
         private byte[] SerializeHeader(TankHeader h)
@@ -371,208 +365,77 @@ namespace DS2_Tank_Viewer
             using (var ms = new MemoryStream())
             using (var w = new BinaryWriter(ms))
             {
-                w.Write(h.ProductId.c0); w.Write(h.ProductId.c1);
-                w.Write(h.ProductId.c2); w.Write(h.ProductId.c3);
-                w.Write(h.TankId.c0); w.Write(h.TankId.c1);
-                w.Write(h.TankId.c2); w.Write(h.TankId.c3);
+                w.Write(h.ProductId.c0); w.Write(h.ProductId.c1); w.Write(h.ProductId.c2); w.Write(h.ProductId.c3);
+                w.Write(h.TankId.c0); w.Write(h.TankId.c1); w.Write(h.TankId.c2); w.Write(h.TankId.c3);
                 w.Write(h.HeaderVersion);
                 w.Write(h.DirSetOffset);
                 w.Write(h.FileSetOffset);
                 w.Write(h.IndexSize);
                 w.Write(h.DataOffset);
-                w.Write(h.ProductVersion.v1);
-                w.Write(h.ProductVersion.v2);
-                w.Write(h.ProductVersion.v3);
-                w.Write(h.MinimumVersion.v1);
-                w.Write(h.MinimumVersion.v2);
-                w.Write(h.MinimumVersion.v3);
+                w.Write(h.ProductVersion.v1); w.Write(h.ProductVersion.v2); w.Write(h.ProductVersion.v3);
+                w.Write(h.MinimumVersion.v1); w.Write(h.MinimumVersion.v2); w.Write(h.MinimumVersion.v3);
                 w.Write(h.Priority);
                 w.Write(h.Flags);
-                w.Write(h.CreatorId.c0); w.Write(h.CreatorId.c1);
-                w.Write(h.CreatorId.c2); w.Write(h.CreatorId.c3);
-                w.Write(h.Guid);         // 16 bytes
+                w.Write(h.CreatorId.c0); w.Write(h.CreatorId.c1); w.Write(h.CreatorId.c2); w.Write(h.CreatorId.c3);
+                w.Write(h.Guid);
                 w.Write(h.IndexCrc32);
                 w.Write(h.DataCrc32);
-                w.Write(h.UtcBuildTime.Year);
-                w.Write(h.UtcBuildTime.Month);
-                w.Write(h.UtcBuildTime.DayOfWeek);
-                w.Write(h.UtcBuildTime.Day);
-                w.Write(h.UtcBuildTime.Hour);
-                w.Write(h.UtcBuildTime.Minute);
-                w.Write(h.UtcBuildTime.Second);
-                w.Write(h.UtcBuildTime.Milliseconds);
+                w.Write(h.UtcBuildTime.Year); w.Write(h.UtcBuildTime.Month); w.Write(h.UtcBuildTime.DayOfWeek); w.Write(h.UtcBuildTime.Day);
+                w.Write(h.UtcBuildTime.Hour); w.Write(h.UtcBuildTime.Minute); w.Write(h.UtcBuildTime.Second); w.Write(h.UtcBuildTime.Milliseconds);
                 WriteWideFixed(w, h.CopyrightText, 100);
                 WriteWideFixed(w, h.BuildText, 100);
                 WriteWideFixed(w, h.TitleText, 100);
                 WriteWideFixed(w, h.AuthorText, 40);
                 WriteWideNString(w, h.DescriptionText);
-                // RAW_HEADER_PAD = 16 bytes of zero padding between end of header
-                // and start of data section. Defined in TankStructure.h and required
-                // by the engine. Without it the header is 788 bytes instead of 804.
-                for (int pad = 0; pad < 16; pad++) w.Write((byte)0);
+                for (int i = 0; i < 16; i++) w.Write((byte)0);
                 return ms.ToArray();
             }
         }
 
-        // ── string helpers (mirror TankReader exactly) ───────────────────────
-
-        private ushort AlignToDword(ushort size)
-            => (ushort)(size + (4 - (size % 4)));  // always adds 1-4; matches C++ alignToDword
-
-        private void WriteNString(BinaryWriter w, string str)
-        {
-            if (str == null) str = "";
-            byte[] bytes = Encoding.ASCII.GetBytes(str);
-            ushort len = (ushort)bytes.Length;
-            w.Write(len);
-
-            if (len == 0)
-            {
-                w.Write((ushort)0);  // consume padding word → total 4 bytes for empty string
-                return;
-            }
-
-            // Total bytes to write after the length word = alignToDword(len+2) - 2
-            ushort totalToWrite = (ushort)(AlignToDword((ushort)(len + 2)) - 2);
-            w.Write(bytes);
-            int padding = totalToWrite - len;
-            for (int i = 0; i < padding; i++) w.Write((byte)0);
-        }
-
-        private void WriteWideFixed(BinaryWriter w, string str, int maxChars)
-        {
-            byte[] bytes = Encoding.Unicode.GetBytes(str ?? "");
-            byte[] buffer = new byte[maxChars * 2];
-            Array.Copy(bytes, buffer, Math.Min(bytes.Length, buffer.Length));
-            w.Write(buffer);
-        }
-
-        private void WriteWideNString(BinaryWriter w, string str)
-        {
-            if (str == null) str = "";
-            byte[] bytes = Encoding.Unicode.GetBytes(str);
-            ushort lenInChars = (ushort)(bytes.Length / 2);
-            w.Write(lenInChars);
-
-            if (lenInChars == 0)
-            {
-                w.Write((ushort)0);
-                return;
-            }
-
-            ushort totalToWrite = (ushort)(AlignToDword((ushort)(lenInChars + 2)) - 2);
-            w.Write(bytes);
-            int padding = totalToWrite - bytes.Length;
-            for (int i = 0; i < padding; i++) w.Write((byte)0);
-        }
-
-        // ── directory management ─────────────────────────────────────────────
-
-        /// <summary>
-        /// Ensures all directories on the given path exist, creating them if needed.
-        /// Returns the index of the leaf directory.
-        /// </summary>
+        // ---------------------------------------------------------------------
+        // Helpers
+        // ---------------------------------------------------------------------
         private int EnsureDirectory(string dirPath)
         {
-            if (string.IsNullOrEmpty(dirPath)) return 0;  // root
-
-            if (_pathToDirIndex.TryGetValue(dirPath, out int existing))
-                return existing;
+            if (string.IsNullOrEmpty(dirPath)) return 0;
+            if (_pathToDirIndex.TryGetValue(dirPath, out int existing)) return existing;
 
             string[] parts = dirPath.Split('/');
-            int parentIndex = 0;
-            string currentPath = "";
-
+            int parent = 0;
+            string current = "";
             for (int i = 0; i < parts.Length; i++)
             {
-                string part = parts[i];
-                currentPath = i == 0 ? part : currentPath + "/" + part;
-
-                if (!_pathToDirIndex.TryGetValue(currentPath, out int dirIndex))
+                current = i == 0 ? parts[i] : current + "/" + parts[i];
+                if (!_pathToDirIndex.TryGetValue(current, out int idx))
                 {
                     var newDir = new WriterDirEntry
                     {
-                        CanonicalPath = currentPath,
-                        Name = part,
-                        ParentIndex = parentIndex,
+                        CanonicalPath = current,
+                        Name = parts[i],
+                        ParentIndex = parent,
                         FileTime = NowFileTime()
                     };
-                    dirIndex = _dirs.Count;
+                    idx = _dirs.Count;
                     _dirs.Add(newDir);
-                    _pathToDirIndex[currentPath] = dirIndex;
-                    _dirs[parentIndex].ChildDirIndices.Add(dirIndex);
+                    _pathToDirIndex[current] = idx;
+                    _dirs[parent].ChildDirIndices.Add(idx);
                 }
-
-                parentIndex = dirIndex;
+                parent = idx;
             }
-
-            return parentIndex;
+            return parent;
         }
-
-        // ── compression ──────────────────────────────────────────────────────
-
-        private CompressedHeader CompressChunked(byte[] data, uint chunkSize)
-        {
-            var header = new CompressedHeader
-            {
-                ChunkSize = chunkSize,
-                Chunks = new List<CompressedChunk>()
-            };
-
-            uint totalCompressed = 0;
-            int pos = 0;
-
-            while (pos < data.Length)
-            {
-                int take = (int)Math.Min(chunkSize, data.Length - pos);
-                byte[] src = new byte[take];
-                Array.Copy(data, pos, src, 0, take);
-
-                // Compress with SharpZipLib Deflater (second arg: nowrap=false → standard zlib framing with header)
-                var deflater = new Deflater(Deflater.BEST_COMPRESSION, false);
-                deflater.SetInput(src);
-                deflater.Finish();
-
-                // Upper bound: uncompressed size + small overhead
-                byte[] compBuf = new byte[take + 64];
-                int compLen = deflater.Deflate(compBuf);
-                byte[] compressed = new byte[compLen];
-                Array.Copy(compBuf, compressed, compLen);
-
-                header.Chunks.Add(new CompressedChunk
-                {
-                    UncompressedSize = (uint)take,
-                    CompressedSize = (uint)compLen,
-                    ExtraBytes = 0,
-                    Offset = (uint)_dataBuffer.Count
-                });
-
-                _dataBuffer.AddRange(compressed);
-                totalCompressed += (uint)compLen;
-                pos += take;
-            }
-
-            header.CompressedSize = totalCompressed;
-            header.NumChunks = (uint)header.Chunks.Count;
-            return header;
-        }
-
-        // ── misc helpers ─────────────────────────────────────────────────────
 
         private void InitHeader()
         {
             var now = DateTime.UtcNow;
             _header = new TankHeader
             {
-                ProductId = new FourCC { c0 = (byte)'D', c1 = (byte)'S', c2 = (byte)'g', c3 = (byte)'2' },
+                ProductId = new FourCC { c0 = (byte)'D', c1 = (byte)'S', c2 = (byte)'g', c3 = (byte)'2' }, // "DSg2"
                 TankId = new FourCC { c0 = (byte)'T', c1 = (byte)'a', c2 = (byte)'n', c3 = (byte)'k' },
-                // DS2 uses header version 1.1.0 = 0x00010100
-                // (DS1/reference code used 1.0.2; DS2 bumped the minor)
-                HeaderVersion = MakeVersion(1, 1, 0),
-                // ProductVersion bytes from working DS2 mod tank: 00 00 05 00 | d2 07 03 00 | 08 00 01 00
+                HeaderVersion = MakeVersion(1, 0, 2),
                 ProductVersion = new ProductVersion { v1 = 0x00050000, v2 = 0x000307d2, v3 = 0x00010008 },
                 MinimumVersion = new ProductVersion { v1 = 0x00050000, v2 = 0x000307d2, v3 = 0x00010008 },
-                Priority = 0x4000,  // PRIORITY_USER
+                Priority = 0x4000,
                 Flags = 0,
                 CreatorId = new FourCC { c0 = (byte)'U', c1 = (byte)'S', c2 = (byte)'E', c3 = (byte)'R' },
                 Guid = Guid.NewGuid().ToByteArray(),
@@ -595,28 +458,21 @@ namespace DS2_Tank_Viewer
             };
         }
 
-        private static uint MakeVersion(int major, int minor, int rev)
-            => (uint)((major << 16) | (minor << 8) | rev);
-
+        private static int AlignUp(int value, int alignment) => (value + alignment - 1) & ~(alignment - 1);
+        private static uint MakeVersion(int major, int minor, int rev) => (uint)((major << 16) | (minor << 8) | rev);
         private static FileTime NowFileTime()
         {
             long ft = DateTime.UtcNow.ToFileTimeUtc();
-            return new FileTime
-            {
-                LowDateTime = (uint)(ft & 0xFFFFFFFF),
-                HighDateTime = (uint)((ft >> 32) & 0xFFFFFFFF)
-            };
+            return new FileTime { LowDateTime = (uint)(ft & 0xFFFFFFFF), HighDateTime = (uint)((ft >> 32) & 0xFFFFFFFF) };
         }
-
         private static uint Crc32(byte[] data)
         {
             uint crc = 0xFFFFFFFF;
-            foreach (byte b in data)
-                crc = (crc >> 8) ^ Crc32Table[(crc ^ b) & 0xFF];
+            foreach (byte b in data) crc = (crc >> 8) ^ Crc32Table[(crc ^ b) & 0xFF];
             return ~crc;
         }
 
-        private static readonly uint[] Crc32Table =
+private static readonly uint[] Crc32Table =
         {
             0x00000000,0x77073096,0xEE0E612C,0x990951BA,0x076DC419,0x706AF48F,0xE963A535,0x9E6495A3,
             0x0EDB8832,0x79DCB8A4,0xE0D5E91E,0x97D2D988,0x09B64C2B,0x7EB17CBD,0xE7B82D07,0x90BF1D91,

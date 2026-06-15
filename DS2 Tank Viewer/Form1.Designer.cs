@@ -32,11 +32,12 @@
             btnLoad = new Button();
             dataGridView1 = new DataGridView();
             panel1 = new Panel();
+            btnRTCCreateTank = new Button();
+            btnPackTank = new Button();
             btnExtractSelected = new Button();
             btnExtractAll = new Button();
             label1 = new Label();
             panel2 = new Panel();
-            btnPackTank = new Button();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
@@ -73,6 +74,7 @@
             // 
             // panel1
             // 
+            panel1.Controls.Add(btnRTCCreateTank);
             panel1.Controls.Add(btnPackTank);
             panel1.Controls.Add(btnExtractSelected);
             panel1.Controls.Add(btnExtractAll);
@@ -83,6 +85,38 @@
             panel1.Name = "panel1";
             panel1.Size = new Size(184, 450);
             panel1.TabIndex = 2;
+            // 
+            // btnRTCCreateTank
+            // 
+            btnRTCCreateTank.BackColor = Color.FromArgb(54, 54, 54);
+            btnRTCCreateTank.FlatAppearance.BorderSize = 0;
+            btnRTCCreateTank.FlatAppearance.MouseDownBackColor = Color.FromArgb(39, 39, 39);
+            btnRTCCreateTank.FlatAppearance.MouseOverBackColor = Color.FromArgb(64, 64, 64);
+            btnRTCCreateTank.FlatStyle = FlatStyle.Flat;
+            btnRTCCreateTank.ForeColor = Color.Turquoise;
+            btnRTCCreateTank.Location = new Point(12, 258);
+            btnRTCCreateTank.Name = "btnRTCCreateTank";
+            btnRTCCreateTank.Size = new Size(160, 34);
+            btnRTCCreateTank.TabIndex = 5;
+            btnRTCCreateTank.Text = "Pack New Tank via RTC";
+            btnRTCCreateTank.UseVisualStyleBackColor = false;
+            btnRTCCreateTank.Click += btnRTCCreateTank_Click;
+            // 
+            // btnPackTank
+            // 
+            btnPackTank.BackColor = Color.FromArgb(54, 54, 54);
+            btnPackTank.FlatAppearance.BorderSize = 0;
+            btnPackTank.FlatAppearance.MouseDownBackColor = Color.FromArgb(39, 39, 39);
+            btnPackTank.FlatAppearance.MouseOverBackColor = Color.FromArgb(64, 64, 64);
+            btnPackTank.FlatStyle = FlatStyle.Flat;
+            btnPackTank.ForeColor = Color.SpringGreen;
+            btnPackTank.Location = new Point(12, 218);
+            btnPackTank.Name = "btnPackTank";
+            btnPackTank.Size = new Size(160, 34);
+            btnPackTank.TabIndex = 4;
+            btnPackTank.Text = "Pack New Tank";
+            btnPackTank.UseVisualStyleBackColor = false;
+            btnPackTank.Click += btnPackTank_Click;
             // 
             // btnExtractSelected
             // 
@@ -136,22 +170,6 @@
             panel2.Size = new Size(616, 450);
             panel2.TabIndex = 2;
             // 
-            // btnPackTank
-            // 
-            btnPackTank.BackColor = Color.FromArgb(54, 54, 54);
-            btnPackTank.FlatAppearance.BorderSize = 0;
-            btnPackTank.FlatAppearance.MouseDownBackColor = Color.FromArgb(39, 39, 39);
-            btnPackTank.FlatAppearance.MouseOverBackColor = Color.FromArgb(64, 64, 64);
-            btnPackTank.FlatStyle = FlatStyle.Flat;
-            btnPackTank.ForeColor = Color.SpringGreen;
-            btnPackTank.Location = new Point(12, 218);
-            btnPackTank.Name = "btnPackTank";
-            btnPackTank.Size = new Size(160, 34);
-            btnPackTank.TabIndex = 4;
-            btnPackTank.Text = "Pack New Tank";
-            btnPackTank.UseVisualStyleBackColor = false;
-            btnPackTank.Click += btnPackTank_Click;
-            // 
             // DS2TankEditor
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -181,5 +199,6 @@
         private Button btnExtractSelected;
         private Button btnExtractAll;
         private Button btnPackTank;
+        private Button btnRTCCreateTank;
     }
 }

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace DS2_Tank_Viewer
@@ -66,6 +68,7 @@ namespace DS2_Tank_Viewer
         }
         private void btnPackTank_Click(object sender, EventArgs e)
         {
+            MessageBox.Show("Having trouble getting this perfect in C. Please use RTC still for now."); return;
             using (var folderBrowser = new FolderBrowserDialog())
             {
                 folderBrowser.Description = "Select the folder containing files to pack into a Tank.";
@@ -112,6 +115,158 @@ namespace DS2_Tank_Viewer
             string ext = Path.GetExtension(filePath).ToLower();
             string[] noCompress = { ".zip", ".rar", ".7z" };
             return !noCompress.Contains(ext);
+        }
+
+
+        private static string ExtractRtcExe()
+        {
+            string tempPath = Path.GetTempPath();
+            string exePath = Path.Combine(tempPath, "RTC.exe");
+
+            if (!File.Exists(exePath))
+            {
+                using (Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("DS2_Tank_Viewer.Resources.RTC.exe"))
+                using (FileStream output = new FileStream(exePath, FileMode.Create, FileAccess.Write))
+                {
+                    resource.CopyTo(output);
+                }
+            }
+            return exePath;
+        }
+
+        private static string CleanupRtcExe()
+        {
+            string tempPath = Path.GetTempPath();
+            string exePath = Path.Combine(tempPath, "RTC.exe");
+
+            if (!File.Exists(exePath))
+            {
+                File.Delete(exePath);
+            }
+            return exePath;
+        }
+
+        private async void btnRTCCreateTank_Click(object sender, EventArgs e)
+        {
+            // Extract RTC.exe (if not already present)
+            string rtcPath = ExtractRtcExe();
+            if (string.IsNullOrEmpty(rtcPath))
+            {
+                MessageBox.Show("Failed to extract RTC.exe.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Show the options dialog
+            using (var dialog = new Form2())
+            {
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                // Build command line arguments (same as before, but we'll capture output file)
+                string sourceDir = dialog.GetSourceDir();   // you need to expose these properties
+                string outFile = dialog.GetOutFile();
+                string title = dialog.GetTitle();
+                string author = dialog.GetAuthor();
+                string copyright = dialog.GetCopyright();
+                string build = dialog.GetBuild();
+                uint priority = dialog.GetPriority();
+                bool dev = dialog.GetDevFlag();
+                bool mpXfer = dialog.GetMpXferFlag();
+                bool protect = dialog.GetProtectedFlag();
+                bool wait = dialog.GetWaitFlag();
+
+                var args = new List<string>
+        {
+            $"-source \"{sourceDir}\"",
+            $"-out \"{outFile}\""
+        };
+                if (!string.IsNullOrEmpty(title)) args.Add($"-title \"{title}\"");
+                if (!string.IsNullOrEmpty(author)) args.Add($"-author \"{author}\"");
+                if (!string.IsNullOrEmpty(copyright)) args.Add($"-copyright \"{copyright}\"");
+                if (!string.IsNullOrEmpty(build)) args.Add($"-build \"{build}\"");
+                args.Add($"-priority {priority}");
+                if (dev) args.Add("-flagdev");
+                if (mpXfer) args.Add("-flagmpxfer");
+                if (protect) args.Add("-flagprotected");
+                if (wait) args.Add("-waitonexit");
+
+                string arguments = string.Join(" ", args);
+
+                // Run RTC.exe
+                var psi = new ProcessStartInfo
+                {
+                    FileName = rtcPath,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+
+                try
+                {
+                    using (var process = Process.Start(psi))
+                    {
+                        string output = await process.StandardOutput.ReadToEndAsync();
+                        string error = await process.StandardError.ReadToEndAsync();
+                        await process.WaitForExitAsync();
+
+                        if (process.ExitCode == 0)
+                        {
+                            // Patch the generated file to DS2 format
+                            PatchToDs2(outFile);
+                            MessageBox.Show($"DS2 tank created and patched successfully!\n\n{output}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                        else
+                        {
+                            MessageBox.Show($"RTC.exe failed (exit code {process.ExitCode}):\n{error}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Exception: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+
+            // Optional: cleanup RTC.exe if you don't want to keep it
+             CleanupRtcExe();
+        }
+
+        private static void PatchToDs2(string filePath)
+        {
+            byte[] data = File.ReadAllBytes(filePath);
+            bool modified = false;
+
+            // 1. Change "DSig" to "DSg2" at the start (Bytes 0-3)
+            if (data.Length >= 4 && data[0] == 'D' && data[1] == 'S' && data[2] == 'i' && data[3] == 'g')
+            {
+                data[2] = (byte)'g';
+                data[3] = (byte)'2';
+                modified = true;
+            }
+
+            // 2. Fix Header Version and Flags to match WorkingMod.txt
+            // Using the verified bytes: 00 01 01 00 at offset 8
+            if (data.Length >= 12)
+            {
+                // Update version bytes
+                data[8] = 0x00;
+                data[9] = 0x01;
+                data[10] = 0x01;
+                data[11] = 0x00;
+                modified = true;
+            }
+
+            // 3. Fix the flag/alignment byte at offset 54
+            if (data.Length > 54 && data[54] != 0x00)
+            {
+                data[54] = 0x00;
+                modified = true;
+            }
+
+            if (modified)
+                File.WriteAllBytes(filePath, data);
         }
     }
 }

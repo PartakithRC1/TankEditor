@@ -11,12 +11,35 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Resources\RTC.exe" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="DS2RESICON.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\RTC.exe" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="lzo.net" Version="0.0.6" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>
