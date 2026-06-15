@@ -1,4 +1,4 @@
-﻿using ICSharpCode.SharpZipLib.Zip.Compression;
+using ICSharpCode.SharpZipLib.Zip.Compression;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -230,29 +230,27 @@ namespace DS2_Tank_Viewer
             // ── 3. Compute header offsets ────────────────────────────────────
             //
             // DS2 on-disk layout (confirmed from working .ds2res):
-            //   [Header] [padding to 4KB] [Data] [DirSet] [FileSet]
+            //   [Header + RAW_HEADER_PAD] [Data] [DirSet] [FileSet]
             //
-            // DataOffset   = header size rounded up to 4KB alignment
-            // DirSetOffset = DataOffset + compressed data size
+            // RAW_HEADER_PAD (16 bytes) is already baked into SerializeHeader().
+            // DATA_SECTION_ALIGNMENT (4KB) only applies to RAW-format tanks.
+            // For compressed tanks (Zlib/Lzo), DataOffset = headerSize with no extra padding.
+            //
+            // DataOffset   = exact size of serialised header (804 bytes for DS2)
+            // DirSetOffset = DataOffset + total compressed data bytes
             // FileSetOffset= DirSetOffset + DirSet size
-            // IndexSize    = DirSet size + FileSet size  (NOT the data offset!)
+            // IndexSize    = DirSet size + FileSet size
 
             byte[] headerPlaceholder = SerializeHeader(_header);
-            uint headerSize = (uint)headerPlaceholder.Length;
-
-            // Align data section start to 4KB boundary
-            const uint DATA_ALIGNMENT = 4096;
-            uint dataOffset = headerSize;
-            uint alignPad = (DATA_ALIGNMENT - (dataOffset % DATA_ALIGNMENT)) % DATA_ALIGNMENT;
-            dataOffset += alignPad;
-
+            uint headerSize = (uint)headerPlaceholder.Length;  // 804 for DS2
+            uint dataOffset = headerSize;                       // data immediately follows header
             uint dirSetOffset = dataOffset + (uint)_dataBuffer.Count;
             uint fileSetOffset = dirSetOffset + (uint)dirSetData.Length;
-
-            // IndexSize = bytes from DirSetOffset to end of file (DirSet + FileSet only)
             uint indexSize = (uint)(dirSetData.Length + fileSetData.Length);
 
             // ── 4. Compute CRCs ──────────────────────────────────────────────
+            // IndexCRC32 = CRC over DirSet + FileSet bytes (not the header)
+            // DataCRC32  = CRC over the raw data bytes
             byte[] indexForCrc = dirSetData.Concat(fileSetData).ToArray();
             uint indexCrc = Crc32(indexForCrc);
             uint dataCrc = _dataBuffer.Count > 0 ? Crc32(_dataBuffer.ToArray()) : 0;
@@ -267,34 +265,14 @@ namespace DS2_Tank_Viewer
 
             byte[] headerData = SerializeHeader(_header);
 
-            // ── 6. Write file: [Header][pad][Data][DirSet][FileSet][EndPadding] ──────────
+            // ── 6. Write file: [Header+pad][Data][DirSet][FileSet] ───────────
             using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
             using (var writer = new BinaryWriter(fs))
             {
-                writer.Write(headerData);
-                for (uint p = 0; p < alignPad; p++) writer.Write((byte)0);
-                writer.Write(_dataBuffer.ToArray());
-                writer.Write(dirSetData);
-                writer.Write(fileSetData);
-
-                // Add 4-byte end padding
-                long beforePadding = fs.Position;
-                writer.Write((uint)0);  // 4 zero bytes
-                long afterPadding = fs.Position;
-
-                // Final size check
-                long totalSize = fs.Length;
-
-                // Show debug info through WinForms message box
-                System.Windows.Forms.MessageBox.Show(
-                    $"File write complete:\n" +
-                    $"Position before padding: {beforePadding}\n" +
-                    $"Position after padding: {afterPadding}\n" +
-                    $"Padding added: {afterPadding - beforePadding} bytes\n" +
-                    $"Total file size: {totalSize} bytes",
-                    "Debug Info",
-                    System.Windows.Forms.MessageBoxButtons.OK,
-                    System.Windows.Forms.MessageBoxIcon.Information);
+                writer.Write(headerData);             // 804 bytes (includes RAW_HEADER_PAD)
+                writer.Write(_dataBuffer.ToArray());  // data section
+                writer.Write(dirSetData);             // DirSet
+                writer.Write(fileSetData);            // FileSet
             }
         }
 
@@ -428,6 +406,10 @@ namespace DS2_Tank_Viewer
                 WriteWideFixed(w, h.TitleText, 100);
                 WriteWideFixed(w, h.AuthorText, 40);
                 WriteWideNString(w, h.DescriptionText);
+                // RAW_HEADER_PAD = 16 bytes of zero padding between end of header
+                // and start of data section. Defined in TankStructure.h and required
+                // by the engine. Without it the header is 788 bytes instead of 804.
+                for (int pad = 0; pad < 16; pad++) w.Write((byte)0);
                 return ms.ToArray();
             }
         }
