@@ -36,6 +36,7 @@
             btnExtractAll = new Button();
             label1 = new Label();
             panel2 = new Panel();
+            btnPackTank = new Button();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
@@ -72,6 +73,7 @@
             // 
             // panel1
             // 
+            panel1.Controls.Add(btnPackTank);
             panel1.Controls.Add(btnExtractSelected);
             panel1.Controls.Add(btnExtractAll);
             panel1.Controls.Add(btnLoad);
@@ -134,6 +136,22 @@
             panel2.Size = new Size(616, 450);
             panel2.TabIndex = 2;
             // 
+            // btnPackTank
+            // 
+            btnPackTank.BackColor = Color.FromArgb(54, 54, 54);
+            btnPackTank.FlatAppearance.BorderSize = 0;
+            btnPackTank.FlatAppearance.MouseDownBackColor = Color.FromArgb(39, 39, 39);
+            btnPackTank.FlatAppearance.MouseOverBackColor = Color.FromArgb(64, 64, 64);
+            btnPackTank.FlatStyle = FlatStyle.Flat;
+            btnPackTank.ForeColor = Color.SpringGreen;
+            btnPackTank.Location = new Point(12, 218);
+            btnPackTank.Name = "btnPackTank";
+            btnPackTank.Size = new Size(160, 34);
+            btnPackTank.TabIndex = 4;
+            btnPackTank.Text = "Pack New Tank";
+            btnPackTank.UseVisualStyleBackColor = false;
+            btnPackTank.Click += btnPackTank_Click;
+            // 
             // DS2TankEditor
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -162,5 +180,6 @@
         private Label label1;
         private Button btnExtractSelected;
         private Button btnExtractAll;
+        private Button btnPackTank;
     }
 }

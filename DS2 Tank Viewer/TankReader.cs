@@ -237,6 +237,7 @@ namespace DS2_Tank_Viewer
                             ChunkSize = reader.ReadUInt32()
                         };
 
+
                         // NumChunks is COMPUTED (not stored in file), same as C++:
                         //   numChunks = ceil(fileSize / chunkSize)  when chunkSize != 0
                         if (compHeader.ChunkSize > 0)
@@ -256,9 +257,12 @@ namespace DS2_Tank_Viewer
                         }
 
                         file.CompressedInfo = compHeader;
+
+
                     }
 
                     fileEntries.Add(file);
+
                 }
 
                 BuildFileTable();

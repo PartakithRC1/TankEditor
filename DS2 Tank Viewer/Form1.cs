@@ -64,5 +64,54 @@ namespace DS2_Tank_Viewer
         {
 
         }
+        private void btnPackTank_Click(object sender, EventArgs e)
+        {
+            using (var folderBrowser = new FolderBrowserDialog())
+            {
+                folderBrowser.Description = "Select the folder containing files to pack into a Tank.";
+                if (folderBrowser.ShowDialog() != DialogResult.OK) return;
+
+                using (var saveDialog = new SaveFileDialog())
+                {
+                    saveDialog.Filter = "Tank Files (*.ds2res)|*.ds2res";
+                    saveDialog.Title = "Save new Tank file";
+                    if (saveDialog.ShowDialog() != DialogResult.OK) return;
+
+                    try
+                    {
+                        var packer = new TankWriter();
+                        string sourcePath = folderBrowser.SelectedPath;
+
+                        var allFiles = Directory.GetFiles(sourcePath, "*", SearchOption.AllDirectories);
+
+                        foreach (string file in allFiles)
+                        {
+                            string relativePath = file.Substring(sourcePath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace('\\', '/');
+                            byte[] fileData = File.ReadAllBytes(file);
+
+                            // Don't compress already compressed formats
+                            bool compress = ShouldCompressFile(file);
+                            packer.AddFile(relativePath, fileData, compress);
+                        }
+
+                        packer.Save(saveDialog.FileName);
+                        MessageBox.Show($"Successfully packed {allFiles.Length} files.", "Pack Complete");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Failed to pack tank: {ex.Message}", "Error");
+                    }
+                }
+            }
+        }
+
+        private bool ShouldCompressFile(string filePath)
+        {
+            // DS2 compresses everything including .raw textures.
+            // Only skip formats that are already compressed at the container level.
+            string ext = Path.GetExtension(filePath).ToLower();
+            string[] noCompress = { ".zip", ".rar", ".7z" };
+            return !noCompress.Contains(ext);
+        }
     }
 }
