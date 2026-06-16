@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace DS2_Tank_Viewer
 {
@@ -16,6 +17,29 @@ namespace DS2_Tank_Viewer
         private TankReader currentTank = null;
         private string currentTankFilePath = "";
 
+        /* private void btnLoad_Click(object sender, EventArgs e)
+         {
+             OpenFileDialog ofd = new OpenFileDialog { Filter = "DS2 Resource Files (*.ds2res)|*.ds2res" };
+             if (ofd.ShowDialog() != DialogResult.OK) return;
+
+             try
+             {
+                 currentTank = new TankReader();
+                 currentTank.Load(ofd.FileName);
+                 currentTankFilePath = ofd.FileName;
+
+                 var fileList = currentTank.GetFileList();
+                 dataGridView1.AutoGenerateColumns = true;
+                 dataGridView1.DataSource = fileList.Select(f => new { FullPath = f }).ToList();
+
+                 MessageBox.Show($"✅ Loaded {currentTank.FileCount} files!", "Success");
+             }
+             catch (Exception ex)
+             {
+                 MessageBox.Show($"Error: {ex.Message}");
+             }
+         }*/
+
         private void btnLoad_Click(object sender, EventArgs e)
         {
             OpenFileDialog ofd = new OpenFileDialog { Filter = "DS2 Resource Files (*.ds2res)|*.ds2res" };
@@ -25,12 +49,51 @@ namespace DS2_Tank_Viewer
             {
                 currentTank = new TankReader();
                 currentTank.Load(ofd.FileName);
-                currentTankFilePath = ofd.FileName;
 
+                // 1. Clear the old data
+                treeViewExplorer.Nodes.Clear();
+                treeViewExplorer.BeginUpdate(); // Prevents flickering while building
+
+                // 2. Get your raw list
                 var fileList = currentTank.GetFileList();
-                dataGridView1.AutoGenerateColumns = true;
-                dataGridView1.DataSource = fileList.Select(f => new { FullPath = f }).ToList();
 
+                // 3. Build the tree
+                foreach (string path in fileList)
+                {
+                    // Remove leading slash if it exists, then split
+                    string[] pathParts = path.TrimStart('\\').Split('\\');
+
+                    TreeNodeCollection currentNodes = treeViewExplorer.Nodes;
+
+                    // Loop through each folder level in the path
+                    for (int i = 0; i < pathParts.Length; i++)
+                    {
+                        string part = pathParts[i];
+
+                        // Check if this node exists at the current level
+                        TreeNode foundNode = null;
+                        foreach (TreeNode node in currentNodes)
+                        {
+                            if (node.Text == part)
+                            {
+                                foundNode = node;
+                                break;
+                            }
+                        }
+
+                        // If it doesn't exist, create it
+                        if (foundNode == null)
+                        {
+                            foundNode = new TreeNode(part);
+                            currentNodes.Add(foundNode);
+                        }
+
+                        // Move our reference deeper into the tree
+                        currentNodes = foundNode.Nodes;
+                    }
+                }
+
+                treeViewExplorer.EndUpdate();
                 MessageBox.Show($"✅ Loaded {currentTank.FileCount} files!", "Success");
             }
             catch (Exception ex)
@@ -38,6 +101,7 @@ namespace DS2_Tank_Viewer
                 MessageBox.Show($"Error: {ex.Message}");
             }
         }
+
 
         private void btnExtractAll_Click(object sender, EventArgs e)
         {
@@ -52,13 +116,13 @@ namespace DS2_Tank_Viewer
 
         private void btnExtractSelected_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("Not yet implemented"); return;
+           // MessageBox.Show("Not yet implemented"); return;
             if (currentTank == null) { MessageBox.Show("Load a tank first!"); return; }
 
             FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "Choose output folder" };
             if (fbd.ShowDialog() == DialogResult.OK)
             {
-                currentTank.ExtractSelected(dataGridView1, fbd.SelectedPath);
+                currentTank.ExtractSelected(treeViewExplorer, fbd.SelectedPath);
             }
         }
 
@@ -68,7 +132,7 @@ namespace DS2_Tank_Viewer
         }
         private void btnPackTank_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("Having trouble getting this perfect in C. Please use RTC still for now."); return;
+            MessageBox.Show("Having trouble getting pakcing correct in C#. Please use RTC still for now."); return;
             using (var folderBrowser = new FolderBrowserDialog())
             {
                 folderBrowser.Description = "Select the folder containing files to pack into a Tank.";

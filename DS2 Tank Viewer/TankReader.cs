@@ -554,30 +554,66 @@ namespace DS2_Tank_Viewer
             try { File.WriteAllText("ds2_extraction_log.txt", summary); } catch { }
         }
 
-        public void ExtractSelected(DataGridView grid, string outputRootPath)
+        public void ExtractSelected(TreeView tree, string outputRootPath)
         {
-            if (grid.SelectedRows.Count == 0)
+            // 1. Validate selection
+            if (tree.SelectedNode == null)
             {
-                MessageBox.Show("Please select at least one file.");
+                MessageBox.Show("Please select a file or folder.");
                 return;
             }
 
+            // 2. Identify all files to extract (Recursive)
+            List<string> filesToExtract = new List<string>();
+            CollectFilePaths(tree.SelectedNode, filesToExtract);
+
+            if (filesToExtract.Count == 0) return;
+
+            // 3. Extract
             string basePath = Path.Combine(outputRootPath, "Extracted");
             Directory.CreateDirectory(basePath);
 
             int success = 0;
-            foreach (DataGridViewRow row in grid.SelectedRows)
+            foreach (string fullPath in filesToExtract)
             {
-                string fullPath = row.Cells[0].Value?.ToString();
-                if (!string.IsNullOrEmpty(fullPath) && fileTable.TryGetValue(fullPath, out var entry))
+                // Your fileTable likely expects the leading backslash
+                string key = fullPath.StartsWith("\\") ? fullPath : "\\" + fullPath;
+
+                if (fileTable.TryGetValue(key, out var entry))
                 {
-                    string relative = fullPath.TrimStart('\\');
-                    string dest = Path.Combine(basePath, relative);
+                    // Remove the leading slash for the OS path
+                    string relativePath = key.TrimStart('\\');
+                    string dest = Path.Combine(basePath, relativePath);
+
+                    // Ensure subdirectories exist before extracting
+                    Directory.CreateDirectory(Path.GetDirectoryName(dest));
+
                     if (ExtractSingleFile(entry, dest))
                         success++;
                 }
             }
+
             MessageBox.Show($"✅ Successfully extracted {success} files.", "Done");
+        }
+
+        /// <summary>
+        /// Recursively finds all "leaf" nodes (files) under the selected node.
+        /// </summary>
+        private void CollectFilePaths(TreeNode node, List<string> fileList)
+        {
+            // If it has no children, it's a file
+            if (node.Nodes.Count == 0)
+            {
+                fileList.Add(node.FullPath);
+            }
+            else
+            {
+                // If it has children, it's a folder, so recurse into them
+                foreach (TreeNode child in node.Nodes)
+                {
+                    CollectFilePaths(child, fileList);
+                }
+            }
         }
     }
 }

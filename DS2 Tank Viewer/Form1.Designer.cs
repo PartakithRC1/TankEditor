@@ -30,15 +30,15 @@
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(DS2TankEditor));
             btnLoad = new Button();
-            dataGridView1 = new DataGridView();
             panel1 = new Panel();
+            label2 = new Label();
             btnRTCCreateTank = new Button();
             btnPackTank = new Button();
             btnExtractSelected = new Button();
             btnExtractAll = new Button();
             label1 = new Label();
             panel2 = new Panel();
-            ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
+            treeViewExplorer = new TreeView();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
             SuspendLayout();
@@ -59,21 +59,9 @@
             btnLoad.UseVisualStyleBackColor = false;
             btnLoad.Click += btnLoad_Click;
             // 
-            // dataGridView1
-            // 
-            dataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            dataGridView1.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
-            dataGridView1.BackgroundColor = Color.FromArgb(33, 33, 33);
-            dataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dataGridView1.Dock = DockStyle.Fill;
-            dataGridView1.GridColor = Color.FromArgb(22, 22, 22);
-            dataGridView1.Location = new Point(0, 0);
-            dataGridView1.Name = "dataGridView1";
-            dataGridView1.Size = new Size(616, 450);
-            dataGridView1.TabIndex = 1;
-            // 
             // panel1
             // 
+            panel1.Controls.Add(label2);
             panel1.Controls.Add(btnRTCCreateTank);
             panel1.Controls.Add(btnPackTank);
             panel1.Controls.Add(btnExtractSelected);
@@ -85,6 +73,17 @@
             panel1.Name = "panel1";
             panel1.Size = new Size(184, 450);
             panel1.TabIndex = 2;
+            // 
+            // label2
+            // 
+            label2.AutoSize = true;
+            label2.Font = new Font("Bahnschrift", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label2.ForeColor = Color.CornflowerBlue;
+            label2.Location = new Point(81, 428);
+            label2.Name = "label2";
+            label2.Size = new Size(101, 19);
+            label2.TabIndex = 6;
+            label2.Text = "Version: 1.0.3";
             // 
             // btnRTCCreateTank
             // 
@@ -114,7 +113,7 @@
             btnPackTank.Name = "btnPackTank";
             btnPackTank.Size = new Size(160, 34);
             btnPackTank.TabIndex = 4;
-            btnPackTank.Text = "Pack New Tank";
+            btnPackTank.Text = "Pack New Tank via C#";
             btnPackTank.UseVisualStyleBackColor = false;
             btnPackTank.Click += btnPackTank_Click;
             // 
@@ -163,12 +162,22 @@
             // 
             // panel2
             // 
-            panel2.Controls.Add(dataGridView1);
+            panel2.Controls.Add(treeViewExplorer);
             panel2.Dock = DockStyle.Fill;
             panel2.Location = new Point(184, 0);
             panel2.Name = "panel2";
             panel2.Size = new Size(616, 450);
             panel2.TabIndex = 2;
+            // 
+            // treeViewExplorer
+            // 
+            treeViewExplorer.BackColor = Color.FromArgb(32, 32, 32);
+            treeViewExplorer.BorderStyle = BorderStyle.None;
+            treeViewExplorer.ForeColor = Color.Silver;
+            treeViewExplorer.Location = new Point(0, 0);
+            treeViewExplorer.Name = "treeViewExplorer";
+            treeViewExplorer.Size = new Size(616, 450);
+            treeViewExplorer.TabIndex = 2;
             // 
             // DS2TankEditor
             // 
@@ -182,7 +191,6 @@
             Name = "DS2TankEditor";
             Text = "DS2 Tank Editor";
             Load += Form1_Load;
-            ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
             panel1.ResumeLayout(false);
             panel1.PerformLayout();
             panel2.ResumeLayout(false);
@@ -192,7 +200,6 @@
         #endregion
 
         private Button btnLoad;
-        private DataGridView dataGridView1;
         private Panel panel1;
         private Panel panel2;
         private Label label1;
@@ -200,5 +207,7 @@
         private Button btnExtractAll;
         private Button btnPackTank;
         private Button btnRTCCreateTank;
+        private TreeView treeViewExplorer;
+        private Label label2;
     }
 }
