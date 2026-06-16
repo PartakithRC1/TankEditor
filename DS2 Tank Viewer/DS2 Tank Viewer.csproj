@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Resources\ds2_tank_editor.html" />
     <None Remove="Resources\RTC.exe" />
   </ItemGroup>
 
@@ -19,11 +20,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\ds2_tank_editor.html">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\RTC.exe" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="lzo.net" Version="0.0.6" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
   </ItemGroup>
 

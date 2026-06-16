@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DS2 Tank Editor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;500;600&family=Syne:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f1117;
+    --bg2:       #161820;
+    --bg3:       #1e2030;
+    --bg4:       #252840;
+    --border:    #2a2d45;
+    --border2:   #363a5a;
+    --text:      #cdd6f4;
+    --muted:     #6c7086;
+    --accent:    #89b4fa;
+    --accent2:   #b4befe;
+    --green:     #a6e3a1;
+    --red:       #f38ba8;
+    --yellow:    #f9e2af;
+    --orange:    #fab387;
+    --teal:      #94e2d5;
+    --mauve:     #cba6f7;
+    --folder-c:  #f9e2af;
+    --file-c:    #89dceb;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Lato', monospace;
+    font-size: 13px;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Layout ─────────────────────────────────────────── */
+  #app {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 220px 1fr;
+    height: 100vh;
+  }
+
+  /* ── Titlebar ───────────────────────────────────────── */
+  #titlebar {
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    -webkit-app-region: drag;
+  }
+  #titlebar .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  #titlebar .sep { color: var(--border2); }
+  #titlebar .file-name {
+    color: var(--muted);
+    font-size: 12px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #titlebar .version {
+    font-size: 11px;
+    color: var(--border2);
+  }
+
+  /* ── Sidebar ────────────────────────────────────────── */
+  #sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-section {
+    padding: 12px 8px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: 'Lato', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    text-align: left;
+    transition: background 0.12s, color 0.12s;
+    -webkit-app-region: no-drag;
+  }
+  .btn:hover { background: var(--bg3); }
+  .btn:active { background: var(--bg4); }
+  .btn .icon { font-size: 15px; width: 18px; flex-shrink: 0; }
+  .btn.primary { color: var(--accent); }
+  .btn.primary:hover { background: rgba(137,180,250,0.1); }
+  .btn.success { color: var(--green); }
+  .btn.success:hover { background: rgba(166,227,161,0.1); }
+  .btn.warning { color: var(--orange); }
+  .btn.warning:hover { background: rgba(250,179,135,0.1); }
+  .btn.danger  { color: var(--red); }
+  .btn.danger:hover  { background: rgba(243,139,168,0.1); }
+  .btn.mauve   { color: var(--mauve); }
+  .btn.mauve:hover   { background: rgba(203,166,247,0.1); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 6px 8px; }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-footer {
+    padding: 10px 12px;
+    font-size: 10px;
+    color: var(--border2);
+    border-top: 1px solid var(--border);
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Main / Tree Panel ──────────────────────────────── */
+  #main {
+    background: var(--bg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tool-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: 'Lato', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .tool-btn:hover { background: var(--bg4); border-color: var(--border2); }
+  .tool-btn:active { background: var(--bg4); }
+  .tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .tool-btn .ti { font-size: 14px; }
+
+  .toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+  .toolbar-spacer { flex: 1; }
+  #search-box {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: 'Lato', monospace;
+    font-size: 11px;
+    padding: 4px 8px 4px 28px;
+    width: 180px;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  #search-box::placeholder { color: var(--muted); }
+  #search-box:focus { border-color: var(--accent); }
+  .search-wrap { position: relative; }
+  .search-wrap .ti {
+    position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 13px; pointer-events: none;
+  }
+
+  /* stats bar */
+  #stats {
+    padding: 4px 12px;
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  #stats span { color: var(--text); }
+
+  /* ── Tree View ──────────────────────────────────────── */
+  #tree-container {
+    flex: 1;
+    overflow: auto;
+    padding: 6px 0;
+  }
+  #tree-container::-webkit-scrollbar { width: 6px; height: 6px; }
+  #tree-container::-webkit-scrollbar-track { background: transparent; }
+  #tree-container::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .tree-node {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 0 4px;
+    white-space: nowrap;
+    font-size: 12px;
+    transition: background 0.08s;
+  }
+  .tree-node:hover { background: var(--bg3); }
+  .tree-node.selected { background: rgba(137,180,250,0.15); }
+  .tree-node .toggle {
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px; flex-shrink: 0;
+    transition: transform 0.15s;
+  }
+  .tree-node.open > .toggle { transform: rotate(90deg); }
+  .tree-node .node-icon { font-size: 14px; flex-shrink: 0; }
+  .tree-node.folder .node-icon { color: var(--folder-c); }
+  .tree-node.file .node-icon   { color: var(--file-c); }
+  .tree-node .label { overflow: hidden; text-overflow: ellipsis; }
+  .tree-node .ext { color: var(--muted); }
+  .tree-children { display: none; }
+  .tree-children.visible { display: block; }
+
+  /* empty state */
+  #empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    padding: 40px;
+    text-align: center;
+  }
+  #empty-state .big-icon { font-size: 48px; color: var(--border2); }
+  #empty-state h3 { font-family: 'Syne', sans-serif; font-size: 15px; color: var(--text); }
+  #empty-state p { font-size: 11px; line-height: 1.7; }
+
+  /* ── Toast / Notification ───────────────────────────── */
+  #toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+  }
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    font-size: 12px;
+    max-width: 320px;
+    animation: slideIn 0.2s ease;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error   { border-left: 3px solid var(--red); }
+  .toast.info    { border-left: 3px solid var(--accent); }
+  .toast.warning { border-left: 3px solid var(--yellow); }
+  .toast .t-icon { font-size: 16px; flex-shrink: 0; }
+  .toast.success .t-icon { color: var(--green); }
+  .toast.error   .t-icon { color: var(--red); }
+  .toast.info    .t-icon { color: var(--accent); }
+  .toast.warning .t-icon { color: var(--yellow); }
+  .toast .t-body { flex: 1; }
+  .toast .t-title { font-weight: 500; margin-bottom: 2px; color: var(--text); }
+  .toast .t-msg   { color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .toast .t-close { color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 2px; }
+  .toast .t-close:hover { color: var(--text); }
+  @keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: none; } }
+
+  /* ── Modal ──────────────────────────────────────────── */
+  #modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+  }
+  #modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 24px;
+    width: 480px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .modal-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px; font-weight: 700;
+    color: var(--accent);
+  }
+  .modal-close {
+    background: none; border: none;
+    color: var(--muted); cursor: pointer; font-size: 18px; padding: 2px;
+  }
+  .modal-close:hover { color: var(--text); }
+  .form-row {
+    display: flex; flex-direction: column; gap: 5px;
+    margin-bottom: 14px;
+  }
+  .form-row label {
+    font-size: 10px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .form-row input[type=text],
+  .form-row input[type=number] {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: 'Lato', monospace;
+    font-size: 12px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.12s;
+    width: 100%;
+  }
+  .form-row input:focus { border-color: var(--accent); }
+  .form-row .input-group { display: flex; gap: 6px; }
+  .form-row .input-group input { flex: 1; }
+  .form-row .input-group .browse-btn {
+    padding: 7px 12px;
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: 'Lato', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .form-row .input-group .browse-btn:hover { border-color: var(--border2); }
+  .checkbox-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; cursor: pointer;
+  }
+  .checkbox-row input[type=checkbox] {
+    accent-color: var(--accent);
+    width: 14px; height: 14px;
+  }
+  .checkbox-row .cb-label { font-size: 12px; color: var(--text); }
+  .checkbox-row .cb-desc  { font-size: 10px; color: var(--muted); margin-left: auto; }
+  .form-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .modal-actions {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 20px;
+  }
+  .modal-btn {
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-family: 'Lato', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: background 0.12s;
+  }
+  .modal-btn.cancel { background: var(--bg3); color: var(--muted); }
+  .modal-btn.cancel:hover { color: var(--text); }
+  .modal-btn.confirm { background: rgba(137,180,250,0.15); border-color: var(--accent); color: var(--accent); }
+  .modal-btn.confirm:hover { background: rgba(137,180,250,0.25); }
+  .modal-btn.confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* progress bar inside modal */
+  .progress-wrap { margin: 10px 0; display: none; }
+  .progress-bar {
+    height: 3px; background: var(--border);
+    border-radius: 2px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: var(--accent);
+    width: 0%; transition: width 0.3s;
+    border-radius: 2px;
+  }
+  .progress-label { font-size: 10px; color: var(--muted); margin-top: 5px; }
+
+  /* context menu */
+  #ctx-menu {
+    display: none;
+    position: fixed;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    padding: 4px;
+    z-index: 900;
+    min-width: 160px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  #ctx-menu.open { display: block; }
+  .ctx-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .ctx-item:hover { background: var(--bg4); }
+  .ctx-item .ti { font-size: 14px; color: var(--muted); }
+  .ctx-sep { border: none; border-top: 1px solid var(--border); margin: 3px 0; }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Titlebar -->
+  <div id="titlebar">
+    <span class="logo"> DSII Tank Editor</span>
+    <span class="sep">·</span>
+    <span class="file-name" id="title-filename">No file loaded</span>
+    <span class="version">v1.0.4</span>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-section">File</div>
+    <button class="btn primary" onclick="window.chrome.webview.postMessage({cmd:'loadTank'})">
+      <i class="ti ti-package-import icon"></i> Load DS2 Tank
+    </button>
+
+    <div class="divider"></div>
+    <div class="sidebar-section">Extract</div>
+    <button class="btn success" id="btn-extract-all" disabled onclick="window.chrome.webview.postMessage({cmd:'extractAll'})">
+      <i class="ti ti-download icon"></i> Extract All
+    </button>
+    <button class="btn success" id="btn-extract-sel" disabled onclick="postExtractSelected()">
+      <i class="ti ti-file-download icon"></i> Extract Selected
+    </button>
+
+    <div class="divider"></div>
+    <div class="sidebar-section">Pack</div>
+    <button class="btn warning" onclick="openRtcModal()">
+      <i class="ti ti-archive icon"></i> Pack via RTC
+    </button>
+    <button class="btn danger" onclick="showToast('info','C# Packing','Packing via C# is temporarily disabled. Use RTC instead.')">
+      <i class="ti ti-box icon"></i> Pack via C#
+    </button>
+
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">DS2 Tank Editor · v1.0.3</div>
+  </div>
+
+  <!-- Main Panel -->
+  <div id="main">
+    <div id="toolbar">
+      <button class="tool-btn" id="tb-collapse" disabled onclick="collapseAll()">
+        <i class="ti ti-arrows-minimize"></i> Collapse
+      </button>
+      <button class="tool-btn" id="tb-expand" disabled onclick="expandAll()">
+        <i class="ti ti-arrows-maximize"></i> Expand
+      </button>
+      <div class="toolbar-sep"></div>
+      <button class="tool-btn" id="tb-extract-sel" disabled onclick="postExtractSelected()">
+        <i class="ti ti-file-download"></i> Extract Selected
+      </button>
+      <div class="toolbar-spacer"></div>
+      <div class="search-wrap">
+        <i class="ti ti-search"></i>
+        <input type="text" id="search-box" placeholder="Search files..." oninput="filterTree(this.value)">
+      </div>
+    </div>
+
+    <div id="stats" style="display:none;">
+      Files: <span id="stat-files">0</span> &nbsp;·&nbsp;
+      Folders: <span id="stat-folders">0</span> &nbsp;·&nbsp;
+      Showing: <span id="stat-showing">0</span>
+    </div>
+
+    <div id="empty-state">
+      <i class="ti ti-package big-icon"></i>
+      <h3>No Tank Loaded</h3>
+      <p>Click <strong style="color:var(--accent)">Load DS2 Tank</strong> to open a<br>.ds2res resource file and browse its contents.</p>
+    </div>
+
+    <div id="tree-container" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Context Menu -->
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="ctxExtract()">
+    <i class="ti ti-download"></i> Extract
+  </div>
+  <div class="ctx-item" onclick="ctxExtractHere()">
+    <i class="ti ti-file-download"></i> Extract to…
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxCopyPath()">
+    <i class="ti ti-copy"></i> Copy path
+  </div>
+</div>
+
+<!-- RTC Modal -->
+<div id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title"><i class="ti ti-archive" style="margin-right:6px"></i>Pack New Tank via RTC</span>
+      <button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+
+    <div class="form-row">
+      <label>Source Directory *</label>
+      <div class="input-group">
+        <input type="text" id="f-source" placeholder="C:\path\to\source\folder">
+        <button class="browse-btn" onclick="browseSource()"><i class="ti ti-folder"></i> Browse</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Output File *</label>
+      <div class="input-group">
+        <input type="text" id="f-out" placeholder="output.ds2res">
+        <button class="browse-btn" onclick="browseOut()"><i class="ti ti-file"></i> Browse</button>
+      </div>
+    </div>
+
+    <div class="form-divider"></div>
+
+    <div class="form-row">
+      <label>Title</label>
+      <input type="text" id="f-title" placeholder="My Mod">
+    </div>
+    <div class="form-row">
+      <label>Author</label>
+      <input type="text" id="f-author" placeholder="Author name">
+    </div>
+    <div class="form-row">
+      <label>Copyright</label>
+      <input type="text" id="f-copyright" placeholder="© 2024">
+    </div>
+    <div class="form-row">
+      <label>Build</label>
+      <input type="text" id="f-build" placeholder="1.0.0">
+    </div>
+    <div class="form-row">
+      <label>Priority (hex or decimal)</label>
+      <input type="text" id="f-priority" value="0x4000" placeholder="0x4000">
+    </div>
+
+    <div class="form-divider"></div>
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="chk-dev">
+      <span class="cb-label">-flagdev</span>
+      <span class="cb-desc">Development build only</span>
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" id="chk-mpxfer">
+      <span class="cb-label">-flagmpxfer</span>
+      <span class="cb-desc">Allow multiplayer transfer</span>
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" id="chk-protected">
+      <span class="cb-label">-flagprotected</span>
+      <span class="cb-desc">Protected content</span>
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" id="chk-wait">
+      <span class="cb-label">-waitonexit</span>
+      <span class="cb-desc">Pause RTC on exit</span>
+    </label>
+
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-label" id="progress-label">Running RTC.exe…</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-btn confirm" id="btn-create-tank" onclick="submitRtc()">
+        <i class="ti ti-archive" style="margin-right:4px"></i>Create Tank
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+let allNodes = [];   // flat list of {el, path, depth, isFolder}
+let selectedNode = null;
+let ctxTarget = null;
+
+// ─────────────────────────────────────────────────────────────
+// C# Bridge — called FROM C#
+// ─────────────────────────────────────────────────────────────
+window.ds2 = {
+  populateTree(fileList, fileCount) {
+    buildTree(fileList);
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('tree-container').style.display = 'block';
+    document.getElementById('stats').style.display = 'flex';
+    document.getElementById('title-filename').textContent = fileList[0]?.split('\\')[0] ?? 'Unknown Tank';
+    document.getElementById('btn-extract-all').disabled = false;
+    document.getElementById('btn-extract-sel').disabled = false;
+    document.getElementById('tb-collapse').disabled = false;
+    document.getElementById('tb-expand').disabled = false;
+    updateStats();
+    showToast('success', 'Tank Loaded', `${fileCount} files loaded successfully.`);
+  },
+  setFileName(name) {
+    document.getElementById('title-filename').textContent = name;
+  },
+  showToast(type, title, msg) {
+    showToast(type, title, msg);
+  },
+  setProgress(pct, label) {
+    const wrap = document.getElementById('progress-wrap');
+    wrap.style.display = 'block';
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = label;
+    if (pct >= 100) {
+      setTimeout(() => { wrap.style.display = 'none'; }, 1200);
+    }
+  },
+  onRtcSuccess(msg) {
+    closeModal();
+    showToast('success', 'Tank Created', msg);
+  },
+  onRtcError(msg) {
+    document.getElementById('btn-create-tank').disabled = false;
+    document.getElementById('btn-create-tank').textContent = 'Retry';
+    showToast('error', 'RTC Failed', msg);
+  },
+  setBrowsedSource(path) {
+    document.getElementById('f-source').value = path;
+  },
+  setBrowsedOut(path) {
+    document.getElementById('f-out').value = path;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// Tree Building
+// ─────────────────────────────────────────────────────────────
+function buildTree(paths) {
+  const container = document.getElementById('tree-container');
+  container.innerHTML = '';
+  allNodes = [];
+
+  const root = {};
+  for (const p of paths) {
+    const parts = p.replace(/^\\/,'').split('\\');
+    let cur = root;
+    for (const part of parts) {
+      if (!cur[part]) cur[part] = {};
+      cur = cur[part];
+    }
+  }
+
+  function render(obj, parent, depth) {
+    const keys = Object.keys(obj).sort((a,b) => {
+      const aIsFolder = Object.keys(obj[a]).length > 0;
+      const bIsFolder = Object.keys(obj[b]).length > 0;
+      if (aIsFolder && !bIsFolder) return -1;
+      if (!aIsFolder && bIsFolder) return 1;
+      return a.localeCompare(b);
+    });
+    for (const key of keys) {
+      const children = obj[key];
+      const isFolder = Object.keys(children).length > 0;
+      const nodeEl = document.createElement('div');
+      nodeEl.className = 'tree-node ' + (isFolder ? 'folder' : 'file');
+      nodeEl.style.paddingLeft = (8 + depth * 16) + 'px';
+      nodeEl.dataset.name = key;
+      nodeEl.dataset.depth = depth;
+
+      const toggle = document.createElement('span');
+      toggle.className = 'toggle';
+      toggle.innerHTML = isFolder ? '<i class="ti ti-chevron-right"></i>' : '';
+      nodeEl.appendChild(toggle);
+
+      const icon = document.createElement('span');
+      icon.className = 'node-icon';
+      icon.innerHTML = isFolder
+        ? '<i class="ti ti-folder"></i>'
+        : getFileIcon(key);
+      nodeEl.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      if (!isFolder) {
+        const dot = key.lastIndexOf('.');
+        if (dot > 0) {
+          label.innerHTML = escHtml(key.substring(0, dot)) +
+            '<span class="ext">' + escHtml(key.substring(dot)) + '</span>';
+        } else {
+          label.textContent = key;
+        }
+      } else {
+        label.textContent = key;
+      }
+      nodeEl.appendChild(label);
+
+      parent.appendChild(nodeEl);
+      allNodes.push({ el: nodeEl, name: key, isFolder, depth });
+
+      if (isFolder) {
+        const childContainer = document.createElement('div');
+        childContainer.className = 'tree-children';
+        parent.appendChild(childContainer);
+        render(children, childContainer, depth + 1);
+
+        nodeEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const open = nodeEl.classList.toggle('open');
+          childContainer.classList.toggle('visible', open);
+          selectNode(nodeEl);
+          updateStats();
+        });
+      } else {
+        nodeEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectNode(nodeEl);
+        });
+        nodeEl.addEventListener('dblclick', () => {
+          window.chrome.webview.postMessage({cmd:'previewFile', path: getNodePath(nodeEl)});
+        });
+      }
+
+      nodeEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        ctxTarget = nodeEl;
+        selectNode(nodeEl);
+        showCtxMenu(e.clientX, e.clientY);
+      });
+    }
+  }
+
+  render(root, container, 0);
+  updateStats();
+}
+
+function getFileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const map = {
+    gas: '<i class="ti ti-file-code"></i>',
+    lqd: '<i class="ti ti-file-3d"></i>',
+    skrit: '<i class="ti ti-file-code"></i>',
+    raw: '<i class="ti ti-photo"></i>',
+    tga: '<i class="ti ti-photo"></i>',
+    png: '<i class="ti ti-photo"></i>',
+    bmp: '<i class="ti ti-photo"></i>',
+    wav: '<i class="ti ti-music"></i>',
+    mp3: '<i class="ti ti-music"></i>',
+    ogg: '<i class="ti ti-music"></i>',
+    cfg: '<i class="ti ti-settings"></i>',
+    ini: '<i class="ti ti-settings"></i>',
+  };
+  return map[ext] || '<i class="ti ti-file"></i>';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Selection
+// ─────────────────────────────────────────────────────────────
+function selectNode(el) {
+  if (selectedNode) selectedNode.classList.remove('selected');
+  selectedNode = el;
+  el.classList.add('selected');
+  document.getElementById('tb-extract-sel').disabled = false;
+  document.getElementById('btn-extract-sel').disabled = false;
+}
+
+function getNodePath(el) {
+  const parts = [el.dataset.name];
+  let sib = el.previousElementSibling;
+  while (sib) {
+    if (sib.classList.contains('tree-node')) {
+      const d = parseInt(sib.dataset.depth);
+      if (d < parseInt(el.dataset.depth)) {
+        parts.unshift(sib.dataset.name);
+        el = sib;
+      }
+    }
+    sib = sib.previousElementSibling;
+  }
+  return parts.join('\\');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tree Controls
+// ─────────────────────────────────────────────────────────────
+function expandAll() {
+  document.querySelectorAll('.tree-node.folder').forEach(n => n.classList.add('open'));
+  document.querySelectorAll('.tree-children').forEach(n => n.classList.add('visible'));
+  updateStats();
+}
+function collapseAll() {
+  document.querySelectorAll('.tree-node.folder').forEach(n => n.classList.remove('open'));
+  document.querySelectorAll('.tree-children').forEach(n => n.classList.remove('visible'));
+  updateStats();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Stats
+// ─────────────────────────────────────────────────────────────
+function updateStats() {
+  const files   = document.querySelectorAll('.tree-node.file:not([style*="display: none"])').length;
+  const folders = document.querySelectorAll('.tree-node.folder:not([style*="display: none"])').length;
+  document.getElementById('stat-files').textContent = files;
+  document.getElementById('stat-folders').textContent = folders;
+  document.getElementById('stat-showing').textContent = files + folders;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Search / Filter
+// ─────────────────────────────────────────────────────────────
+function filterTree(q) {
+  q = q.toLowerCase().trim();
+  if (!q) {
+    allNodes.forEach(n => n.el.style.display = '');
+    document.querySelectorAll('.tree-children').forEach(c => {
+      c.classList.remove('visible');
+    });
+    document.querySelectorAll('.tree-node.folder').forEach(n => n.classList.remove('open'));
+    updateStats();
+    return;
+  }
+  // Show matched files + their parent folders
+  const matchedParents = new Set();
+  allNodes.forEach(n => {
+    if (!n.isFolder && n.name.toLowerCase().includes(q)) {
+      n.el.style.display = '';
+      // mark parent containers to show
+      let p = n.el.closest('.tree-children');
+      while (p) {
+        p.classList.add('visible');
+        const sibling = p.previousElementSibling;
+        if (sibling && sibling.classList.contains('tree-node')) {
+          sibling.style.display = '';
+          sibling.classList.add('open');
+          matchedParents.add(sibling);
+        }
+        p = p.parentElement.closest('.tree-children');
+      }
+    } else if (!n.isFolder) {
+      n.el.style.display = 'none';
+    }
+  });
+  // Hide empty folders
+  allNodes.forEach(n => {
+    if (n.isFolder && !matchedParents.has(n.el)) {
+      n.el.style.display = 'none';
+    }
+  });
+  updateStats();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Extract Selected — build the full path from the selected node
+// then send it to C# so it can filter fileTable by prefix.
+// ─────────────────────────────────────────────────────────────
+function getSelectedPath() {
+  if (!selectedNode) return null;
+  // Walk up through the DOM: each tree-node's parent container is a
+  // .tree-children div whose previous sibling is the parent folder node.
+  const parts = [selectedNode.dataset.name];
+  let el = selectedNode;
+  while (true) {
+    const parentChildren = el.parentElement; // .tree-children or #tree-container
+    if (!parentChildren || parentChildren.id === 'tree-container') break;
+    const parentNode = parentChildren.previousElementSibling; // the folder .tree-node
+    if (!parentNode || !parentNode.classList.contains('tree-node')) break;
+    parts.unshift(parentNode.dataset.name);
+    el = parentNode;
+  }
+  return parts.join('\\');
+}
+
+function postExtractSelected() {
+  const path = getSelectedPath();
+  if (!path) { showToast('warning', 'Nothing selected', 'Click a file or folder in the tree first.'); return; }
+  window.chrome.webview.postMessage({ cmd: 'extractSelected', selectedPath: path });
+}
+
+
+const ctxMenu = document.getElementById('ctx-menu');
+function showCtxMenu(x, y) {
+  ctxMenu.style.left = x + 'px';
+  ctxMenu.style.top  = y + 'px';
+  ctxMenu.classList.add('open');
+}
+function hideCtxMenu() { ctxMenu.classList.remove('open'); }
+document.addEventListener('click', hideCtxMenu);
+document.addEventListener('contextmenu', e => { if (!ctxMenu.contains(e.target)) hideCtxMenu(); });
+
+function ctxExtract() {
+  hideCtxMenu();
+  postExtractSelected();
+}
+function ctxExtractHere() {
+  hideCtxMenu();
+  postExtractSelected();
+}
+function ctxCopyPath() {
+  hideCtxMenu();
+  if (ctxTarget) {
+    const p = ctxTarget.dataset.name;
+    navigator.clipboard.writeText(p).then(() => showToast('info','Copied','Path copied to clipboard.'));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Toast Notifications
+// ─────────────────────────────────────────────────────────────
+const iconMap = { success:'ti-circle-check', error:'ti-alert-circle', info:'ti-info-circle', warning:'ti-alert-triangle' };
+function showToast(type, title, msg) {
+  const container = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `
+    <i class="ti ${iconMap[type]||'ti-info-circle'} t-icon"></i>
+    <div class="t-body">
+      <div class="t-title">${escHtml(title)}</div>
+      <div class="t-msg">${escHtml(msg)}</div>
+    </div>
+    <span class="t-close" onclick="this.closest('.toast').remove()"><i class="ti ti-x"></i></span>`;
+  container.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// RTC Modal
+// ─────────────────────────────────────────────────────────────
+function openRtcModal() {
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+  document.getElementById('progress-wrap').style.display = 'none';
+  document.getElementById('progress-fill').style.width = '0%';
+  const btn = document.getElementById('btn-create-tank');
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-archive" style="margin-right:4px"></i>Create Tank';
+}
+document.getElementById('modal-backdrop').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+function browseSource() {
+  window.chrome.webview.postMessage({cmd:'browseSourceDir'});
+}
+function browseOut() {
+  window.chrome.webview.postMessage({cmd:'browseOutFile'});
+}
+
+function submitRtc() {
+  const source = document.getElementById('f-source').value.trim();
+  const out    = document.getElementById('f-out').value.trim();
+  if (!source) { showToast('error','Validation','Source directory is required.'); return; }
+  if (!out)    { showToast('error','Validation','Output file path is required.'); return; }
+
+  const btn = document.getElementById('btn-create-tank');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2" style="margin-right:4px"></i>Packing…';
+
+  document.getElementById('progress-wrap').style.display = 'block';
+  document.getElementById('progress-fill').style.width = '20%';
+  document.getElementById('progress-label').textContent = 'Starting RTC.exe…';
+
+  window.chrome.webview.postMessage({
+    cmd:       'createTankRtc',
+    source:    source,
+    out:       out,
+    title:     document.getElementById('f-title').value.trim(),
+    author:    document.getElementById('f-author').value.trim(),
+    copyright: document.getElementById('f-copyright').value.trim(),
+    build:     document.getElementById('f-build').value.trim(),
+    priority:  document.getElementById('f-priority').value.trim(),
+    flagDev:       document.getElementById('chk-dev').checked,
+    flagMpXfer:    document.getElementById('chk-mpxfer').checked,
+    flagProtected: document.getElementById('chk-protected').checked,
+    flagWait:      document.getElementById('chk-wait').checked,
+  });
+}
+</script>
+</body>
+</html>

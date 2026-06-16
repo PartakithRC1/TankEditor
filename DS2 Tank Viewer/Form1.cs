@@ -1,308 +1,340 @@
+// Form1.cs  –  DS2 Tank Editor with WebView2 frontend
+// NuGet: Microsoft.Web.WebView2
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
+using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
 
 namespace DS2_Tank_Viewer
 {
     public partial class DS2TankEditor : Form
     {
-        public DS2TankEditor()
-        {
-            InitializeComponent();
-        }
-
+        private WebView2 webView;
         private TankReader currentTank = null;
         private string currentTankFilePath = "";
 
-        /* private void btnLoad_Click(object sender, EventArgs e)
-         {
-             OpenFileDialog ofd = new OpenFileDialog { Filter = "DS2 Resource Files (*.ds2res)|*.ds2res" };
-             if (ofd.ShowDialog() != DialogResult.OK) return;
-
-             try
-             {
-                 currentTank = new TankReader();
-                 currentTank.Load(ofd.FileName);
-                 currentTankFilePath = ofd.FileName;
-
-                 var fileList = currentTank.GetFileList();
-                 dataGridView1.AutoGenerateColumns = true;
-                 dataGridView1.DataSource = fileList.Select(f => new { FullPath = f }).ToList();
-
-                 MessageBox.Show($"✅ Loaded {currentTank.FileCount} files!", "Success");
-             }
-             catch (Exception ex)
-             {
-                 MessageBox.Show($"Error: {ex.Message}");
-             }
-         }*/
-
-        private void btnLoad_Click(object sender, EventArgs e)
+        public DS2TankEditor()
         {
-            OpenFileDialog ofd = new OpenFileDialog { Filter = "DS2 Resource Files (*.ds2res)|*.ds2res" };
-            if (ofd.ShowDialog() != DialogResult.OK) return;
+            InitializeComponent();
+            InitWebView();
+        }
+
+        // ── WebView2 Setup ────────────────────────────────────────────────────
+
+        private async void InitWebView()
+        {
+            webView = new WebView2
+            {
+                Dock = DockStyle.Fill,
+                DefaultBackgroundColor = System.Drawing.Color.FromArgb(15, 17, 23) // matches --bg
+            };
+            this.Controls.Add(webView);
+            this.Controls.SetChildIndex(webView, 0); // behind any designer controls
+
+            // Environment — optional: set a user data folder
+            var env = await CoreWebView2Environment.CreateAsync(null,
+                Path.Combine(Path.GetTempPath(), "DS2TankEditor_WebView2"));
+            await webView.EnsureCoreWebView2Async(env);
+
+            webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+            webView.CoreWebView2.Settings.AreDevToolsEnabled = true; // set false for release
+            webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+
+            // Load the embedded HTML
+            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ds2_tank_editor.html");
+            if (File.Exists(htmlPath))
+                webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+            else
+                webView.CoreWebView2.NavigateToString(GetEmbeddedHtml()); // fallback to embedded resource
+
+            // Listen for messages from JavaScript
+            webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+        }
+
+        // Call this to get the HTML if you prefer to embed it as a resource
+        private string GetEmbeddedHtml()
+        {
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("DS2_Tank_Viewer.Resources.ds2_tank_editor.html");
+            if (stream == null) return "<h1>HTML resource missing</h1>";
+            using var reader = new System.IO.StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+
+        // ── Message Router (JS → C#) ─────────────────────────────────────────
+
+        private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            // WebMessageAsJson works for both postMessage(object) and postMessage(string).
+            // TryGetWebMessageAsString() throws an ArgumentException when the JS side
+            // sends an object literal via postMessage({...}) — use WebMessageAsJson instead.
+            var raw = e.WebMessageAsJson;
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+            var cmd = root.GetProperty("cmd").GetString();
+
+            switch (cmd)
+            {
+                case "loadTank": await HandleLoadTank(); break;
+                case "extractAll": await HandleExtractAll(); break;
+                case "extractSelected":
+                    await HandleExtractSelected(
+                                            root.TryGetProperty("selectedPath", out var sp)
+                                                ? sp.GetString() : null); break;
+                case "createTankRtc": await HandleCreateTankRtc(root); break;
+                case "browseSourceDir": HandleBrowseSourceDir(); break;
+                case "browseOutFile": HandleBrowseOutFile(); break;
+                case "previewFile":     /* add preview logic here */     break;
+            }
+        }
+
+        // ── Send helper: C# → JS ─────────────────────────────────────────────
+
+        private void JsCall(string js)
+        {
+            if (webView?.CoreWebView2 == null) return;
+            if (this.InvokeRequired)
+                this.Invoke(() => webView.CoreWebView2.ExecuteScriptAsync(js));
+            else
+                _ = webView.CoreWebView2.ExecuteScriptAsync(js);
+        }
+
+        private void ShowToast(string type, string title, string msg)
+            => JsCall($"window.ds2.showToast({Json(type)},{Json(title)},{Json(msg)})");
+
+        private static string Json(string s) => JsonSerializer.Serialize(s);
+
+        // ── Load Tank ────────────────────────────────────────────────────────
+
+        private async Task HandleLoadTank()
+        {
+            // Must hop to UI thread for dialogs
+            OpenFileDialog ofd = null;
+            DialogResult dr = DialogResult.Cancel;
+
+            this.Invoke(() =>
+            {
+                ofd = new OpenFileDialog { Filter = "DS2 Resource Files (*.ds2res)|*.ds2res" };
+                dr = ofd.ShowDialog(this);
+            });
+
+            if (dr != DialogResult.OK) return;
 
             try
             {
                 currentTank = new TankReader();
                 currentTank.Load(ofd.FileName);
+                currentTankFilePath = ofd.FileName;
 
-                // 1. Clear the old data
-                treeViewExplorer.Nodes.Clear();
-                treeViewExplorer.BeginUpdate(); // Prevents flickering while building
-
-                // 2. Get your raw list
                 var fileList = currentTank.GetFileList();
+                string jsonPaths = JsonSerializer.Serialize(fileList);
 
-                // 3. Build the tree
-                foreach (string path in fileList)
-                {
-                    // Remove leading slash if it exists, then split
-                    string[] pathParts = path.TrimStart('\\').Split('\\');
-
-                    TreeNodeCollection currentNodes = treeViewExplorer.Nodes;
-
-                    // Loop through each folder level in the path
-                    for (int i = 0; i < pathParts.Length; i++)
-                    {
-                        string part = pathParts[i];
-
-                        // Check if this node exists at the current level
-                        TreeNode foundNode = null;
-                        foreach (TreeNode node in currentNodes)
-                        {
-                            if (node.Text == part)
-                            {
-                                foundNode = node;
-                                break;
-                            }
-                        }
-
-                        // If it doesn't exist, create it
-                        if (foundNode == null)
-                        {
-                            foundNode = new TreeNode(part);
-                            currentNodes.Add(foundNode);
-                        }
-
-                        // Move our reference deeper into the tree
-                        currentNodes = foundNode.Nodes;
-                    }
-                }
-
-                treeViewExplorer.EndUpdate();
-                MessageBox.Show($"✅ Loaded {currentTank.FileCount} files!", "Success");
+                JsCall($"window.ds2.populateTree({jsonPaths}, {currentTank.FileCount})");
+                JsCall($"window.ds2.setFileName({Json(Path.GetFileName(ofd.FileName))})");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error: {ex.Message}");
+                ShowToast("error", "Load Failed", ex.Message);
             }
         }
 
+        // ── Extract All ──────────────────────────────────────────────────────
 
-        private void btnExtractAll_Click(object sender, EventArgs e)
+        private async Task HandleExtractAll()
         {
-            if (currentTank == null) { MessageBox.Show("Load a tank first!"); return; }
+            if (currentTank == null) { ShowToast("warning", "No Tank", "Load a tank file first."); return; }
 
-            FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "Choose output folder" };
-            if (fbd.ShowDialog() == DialogResult.OK)
+            FolderBrowserDialog fbd = null;
+            DialogResult dr = DialogResult.Cancel;
+
+            this.Invoke(() =>
             {
-                currentTank.ExtractAll(fbd.SelectedPath);
+                fbd = new FolderBrowserDialog { Description = "Choose output folder" };
+                dr = fbd.ShowDialog(this);
+            });
+
+            if (dr != DialogResult.OK) return;
+
+            try
+            {
+                JsCall($"window.ds2.setProgress(5, 'Extracting…')");
+                await Task.Run(() => currentTank.ExtractAll(fbd.SelectedPath));
+                JsCall($"window.ds2.setProgress(100, 'Done')");
+                ShowToast("success", "Extracted", $"All files extracted to {fbd.SelectedPath}");
+            }
+            catch (Exception ex)
+            {
+                ShowToast("error", "Extract Failed", ex.Message);
             }
         }
 
-        private void btnExtractSelected_Click(object sender, EventArgs e)
-        {
-           // MessageBox.Show("Not yet implemented"); return;
-            if (currentTank == null) { MessageBox.Show("Load a tank first!"); return; }
+        // ── Extract Selected ─────────────────────────────────────────────────
 
-            FolderBrowserDialog fbd = new FolderBrowserDialog { Description = "Choose output folder" };
-            if (fbd.ShowDialog() == DialogResult.OK)
+        private async Task HandleExtractSelected(string selectedPath)
+        {
+            if (currentTank == null) { ShowToast("warning", "No Tank", "Load a tank file first."); return; }
+            if (string.IsNullOrEmpty(selectedPath)) { ShowToast("warning", "Nothing Selected", "Click a file or folder in the tree first."); return; }
+
+            FolderBrowserDialog fbd = null;
+            DialogResult dr = DialogResult.Cancel;
+
+            this.Invoke(() =>
             {
-                currentTank.ExtractSelected(treeViewExplorer, fbd.SelectedPath);
+                fbd = new FolderBrowserDialog { Description = "Choose output folder" };
+                dr = fbd.ShowDialog(this);
+            });
+
+            if (dr != DialogResult.OK) return;
+
+            try
+            {
+                int count = await Task.Run(() => currentTank.ExtractSelected(selectedPath, fbd.SelectedPath));
+                ShowToast("success", "Extracted", $"{count} file{(count == 1 ? "" : "s")} extracted to {fbd.SelectedPath}");
+            }
+            catch (Exception ex)
+            {
+                ShowToast("error", "Extract Failed", ex.Message);
             }
         }
 
-        private void Form1_Load(object sender, EventArgs e)
-        {
+        // ── Browse dialogs (triggered from modal) ────────────────────────────
 
-        }
-        private void btnPackTank_Click(object sender, EventArgs e)
+        private void HandleBrowseSourceDir()
         {
-            MessageBox.Show("Having trouble getting pakcing correct in C#. Please use RTC still for now."); return;
-            using (var folderBrowser = new FolderBrowserDialog())
+            FolderBrowserDialog fbd = null;
+            DialogResult dr = DialogResult.Cancel;
+
+            this.Invoke(() =>
             {
-                folderBrowser.Description = "Select the folder containing files to pack into a Tank.";
-                if (folderBrowser.ShowDialog() != DialogResult.OK) return;
+                fbd = new FolderBrowserDialog { Description = "Select source folder" };
+                dr = fbd.ShowDialog(this);
+            });
 
-                using (var saveDialog = new SaveFileDialog())
+            if (dr == DialogResult.OK)
+                JsCall($"window.ds2.setBrowsedSource({Json(fbd.SelectedPath)})");
+        }
+
+        private void HandleBrowseOutFile()
+        {
+            SaveFileDialog sfd = null;
+            DialogResult dr = DialogResult.Cancel;
+
+            this.Invoke(() =>
+            {
+                sfd = new SaveFileDialog
                 {
-                    saveDialog.Filter = "Tank Files (*.ds2res)|*.ds2res";
-                    saveDialog.Title = "Save new Tank file";
-                    if (saveDialog.ShowDialog() != DialogResult.OK) return;
+                    Filter = "Tank Files (*.ds2res;*.ds2map)|*.ds2res;*.ds2map|All files (*.*)|*.*",
+                    Title = "Save Tank File"
+                };
+                dr = sfd.ShowDialog(this);
+            });
 
-                    try
-                    {
-                        var packer = new TankWriter();
-                        string sourcePath = folderBrowser.SelectedPath;
-
-                        var allFiles = Directory.GetFiles(sourcePath, "*", SearchOption.AllDirectories);
-
-                        foreach (string file in allFiles)
-                        {
-                            string relativePath = file.Substring(sourcePath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace('\\', '/');
-                            byte[] fileData = File.ReadAllBytes(file);
-
-                            // Don't compress already compressed formats
-                            bool compress = ShouldCompressFile(file);
-                            packer.AddFile(relativePath, fileData, compress);
-                        }
-
-                        packer.Save(saveDialog.FileName);
-                        MessageBox.Show($"Successfully packed {allFiles.Length} files.", "Pack Complete");
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Failed to pack tank: {ex.Message}", "Error");
-                    }
-                }
-            }
+            if (dr == DialogResult.OK)
+                JsCall($"window.ds2.setBrowsedOut({Json(sfd.FileName)})");
         }
 
-        private bool ShouldCompressFile(string filePath)
+        // ── Create Tank via RTC ──────────────────────────────────────────────
+
+        private async Task HandleCreateTankRtc(JsonElement root)
         {
-            // DS2 compresses everything including .raw textures.
-            // Only skip formats that are already compressed at the container level.
-            string ext = Path.GetExtension(filePath).ToLower();
-            string[] noCompress = { ".zip", ".rar", ".7z" };
-            return !noCompress.Contains(ext);
-        }
+            string sourceDir = root.GetProperty("source").GetString();
+            string outFile = root.GetProperty("out").GetString();
+            string title = root.GetProperty("title").GetString();
+            string author = root.GetProperty("author").GetString();
+            string copyright = root.GetProperty("copyright").GetString();
+            string build = root.GetProperty("build").GetString();
+            string priorityStr = root.GetProperty("priority").GetString();
+            bool dev = root.GetProperty("flagDev").GetBoolean();
+            bool mpXfer = root.GetProperty("flagMpXfer").GetBoolean();
+            bool protect = root.GetProperty("flagProtected").GetBoolean();
+            bool wait = root.GetProperty("flagWait").GetBoolean();
 
-
-        private static string ExtractRtcExe()
-        {
-            string tempPath = Path.GetTempPath();
-            string exePath = Path.Combine(tempPath, "RTC.exe");
-
-            if (!File.Exists(exePath))
+            // Parse priority
+            uint priority = 0x4000;
+            if (!string.IsNullOrEmpty(priorityStr))
             {
-                using (Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("DS2_Tank_Viewer.Resources.RTC.exe"))
-                using (FileStream output = new FileStream(exePath, FileMode.Create, FileAccess.Write))
-                {
-                    resource.CopyTo(output);
-                }
+                if (priorityStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                    uint.TryParse(priorityStr[2..], System.Globalization.NumberStyles.HexNumber, null, out priority);
+                else
+                    uint.TryParse(priorityStr, out priority);
             }
-            return exePath;
-        }
 
-        private static string CleanupRtcExe()
-        {
-            string tempPath = Path.GetTempPath();
-            string exePath = Path.Combine(tempPath, "RTC.exe");
-
-            if (!File.Exists(exePath))
-            {
-                File.Delete(exePath);
-            }
-            return exePath;
-        }
-
-        private async void btnRTCCreateTank_Click(object sender, EventArgs e)
-        {
-            // Extract RTC.exe (if not already present)
             string rtcPath = ExtractRtcExe();
             if (string.IsNullOrEmpty(rtcPath))
             {
-                MessageBox.Show("Failed to extract RTC.exe.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                JsCall($"window.ds2.onRtcError('Failed to extract RTC.exe')");
                 return;
             }
 
-            // Show the options dialog
-            using (var dialog = new Form2())
+            var args = new List<string>
             {
-                if (dialog.ShowDialog() != DialogResult.OK)
-                    return;
+                $"-source \"{sourceDir}\"",
+                $"-out \"{outFile}\""
+            };
+            if (!string.IsNullOrEmpty(title)) args.Add($"-title \"{title}\"");
+            if (!string.IsNullOrEmpty(author)) args.Add($"-author \"{author}\"");
+            if (!string.IsNullOrEmpty(copyright)) args.Add($"-copyright \"{copyright}\"");
+            if (!string.IsNullOrEmpty(build)) args.Add($"-build \"{build}\"");
+            args.Add($"-priority {priority}");
+            if (dev) args.Add("-flagdev");
+            if (mpXfer) args.Add("-flagmpxfer");
+            if (protect) args.Add("-flagprotected");
+            if (wait) args.Add("-waitonexit");
 
-                // Build command line arguments (same as before, but we'll capture output file)
-                string sourceDir = dialog.GetSourceDir();   // you need to expose these properties
-                string outFile = dialog.GetOutFile();
-                string title = dialog.GetTitle();
-                string author = dialog.GetAuthor();
-                string copyright = dialog.GetCopyright();
-                string build = dialog.GetBuild();
-                uint priority = dialog.GetPriority();
-                bool dev = dialog.GetDevFlag();
-                bool mpXfer = dialog.GetMpXferFlag();
-                bool protect = dialog.GetProtectedFlag();
-                bool wait = dialog.GetWaitFlag();
+            JsCall($"window.ds2.setProgress(30, 'Running RTC.exe…')");
 
-                var args = new List<string>
-        {
-            $"-source \"{sourceDir}\"",
-            $"-out \"{outFile}\""
-        };
-                if (!string.IsNullOrEmpty(title)) args.Add($"-title \"{title}\"");
-                if (!string.IsNullOrEmpty(author)) args.Add($"-author \"{author}\"");
-                if (!string.IsNullOrEmpty(copyright)) args.Add($"-copyright \"{copyright}\"");
-                if (!string.IsNullOrEmpty(build)) args.Add($"-build \"{build}\"");
-                args.Add($"-priority {priority}");
-                if (dev) args.Add("-flagdev");
-                if (mpXfer) args.Add("-flagmpxfer");
-                if (protect) args.Add("-flagprotected");
-                if (wait) args.Add("-waitonexit");
+            var psi = new ProcessStartInfo
+            {
+                FileName = rtcPath,
+                Arguments = string.Join(" ", args),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
 
-                string arguments = string.Join(" ", args);
+            try
+            {
+                using var process = Process.Start(psi);
+                string output = await process.StandardOutput.ReadToEndAsync();
+                string error = await process.StandardError.ReadToEndAsync();
+                await process.WaitForExitAsync();
 
-                // Run RTC.exe
-                var psi = new ProcessStartInfo
+                JsCall($"window.ds2.setProgress(80, 'Patching header…')");
+
+                if (process.ExitCode == 0)
                 {
-                    FileName = rtcPath,
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-
-                try
-                {
-                    using (var process = Process.Start(psi))
-                    {
-                        string output = await process.StandardOutput.ReadToEndAsync();
-                        string error = await process.StandardError.ReadToEndAsync();
-                        await process.WaitForExitAsync();
-
-                        if (process.ExitCode == 0)
-                        {
-                            // Patch the generated file to DS2 format
-                            PatchToDs2(outFile);
-                            MessageBox.Show($"DS2 tank created and patched successfully!\n\n{output}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        }
-                        else
-                        {
-                            MessageBox.Show($"RTC.exe failed (exit code {process.ExitCode}):\n{error}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        }
-                    }
+                    PatchToDs2(outFile);
+                    JsCall($"window.ds2.setProgress(100, 'Complete!')");
+                    JsCall($"window.ds2.onRtcSuccess('Tank created and patched: {Json(Path.GetFileName(outFile))[1..^1]}')");
                 }
-                catch (Exception ex)
+                else
                 {
-                    MessageBox.Show($"Exception: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    JsCall($"window.ds2.onRtcError({Json(error.Trim())})");
                 }
             }
+            catch (Exception ex)
+            {
+                JsCall($"window.ds2.onRtcError({Json(ex.Message)})");
+            }
 
-            // Optional: cleanup RTC.exe if you don't want to keep it
-             CleanupRtcExe();
+            CleanupRtcExe();
         }
+
+        // ── DS2 Patch ────────────────────────────────────────────────────────
 
         private static void PatchToDs2(string filePath)
         {
             byte[] data = File.ReadAllBytes(filePath);
             bool modified = false;
 
-            // 1. Change "DSig" to "DSg2" at the start (Bytes 0-3)
             if (data.Length >= 4 && data[0] == 'D' && data[1] == 'S' && data[2] == 'i' && data[3] == 'g')
             {
                 data[2] = (byte)'g';
@@ -310,27 +342,52 @@ namespace DS2_Tank_Viewer
                 modified = true;
             }
 
-            // 2. Fix Header Version and Flags to match WorkingMod.txt
-            // Using the verified bytes: 00 01 01 00 at offset 8
             if (data.Length >= 12)
             {
-                // Update version bytes
-                data[8] = 0x00;
-                data[9] = 0x01;
-                data[10] = 0x01;
-                data[11] = 0x00;
+                data[8] = 0x00; data[9] = 0x01; data[10] = 0x01; data[11] = 0x00;
                 modified = true;
             }
 
-            // 3. Fix the flag/alignment byte at offset 54
             if (data.Length > 54 && data[54] != 0x00)
             {
                 data[54] = 0x00;
                 modified = true;
             }
 
-            if (modified)
-                File.WriteAllBytes(filePath, data);
+            if (modified) File.WriteAllBytes(filePath, data);
+        }
+
+        // ── RTC.exe helpers ──────────────────────────────────────────────────
+
+        private static string ExtractRtcExe()
+        {
+            string exePath = Path.Combine(Path.GetTempPath(), "RTC.exe");
+            if (!File.Exists(exePath))
+            {
+                using var resource = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("DS2_Tank_Viewer.Resources.RTC.exe");
+                if (resource == null) return null;
+                using var output = new FileStream(exePath, FileMode.Create, FileAccess.Write);
+                resource.CopyTo(output);
+            }
+            return exePath;
+        }
+
+        private static void CleanupRtcExe()
+        {
+            string exePath = Path.Combine(Path.GetTempPath(), "RTC.exe");
+            if (File.Exists(exePath)) File.Delete(exePath);
+        }
+
+        // ── Designer stubs (keep if you had designer-generated code) ─────────
+
+        private void InitializeComponent()
+        {
+            this.Text = "DS2 Tank Editor";
+            this.Size = new System.Drawing.Size(900, 600);
+            this.MinimumSize = new System.Drawing.Size(700, 480);
+            this.BackColor = System.Drawing.Color.FromArgb(15, 17, 23);
+            this.StartPosition = FormStartPosition.CenterScreen;
         }
     }
 }

@@ -554,66 +554,51 @@ namespace DS2_Tank_Viewer
             try { File.WriteAllText("ds2_extraction_log.txt", summary); } catch { }
         }
 
-        public void ExtractSelected(TreeView tree, string outputRootPath)
+        public int ExtractSelected(string selectedPath, string outputRootPath)
         {
-            // 1. Validate selection
-            if (tree.SelectedNode == null)
+            if (string.IsNullOrEmpty(selectedPath))
+                throw new ArgumentNullException(nameof(selectedPath));
+
+            // Normalise: use backslashes, no leading slash
+            string prefix = selectedPath.Replace('/', '\\').TrimStart('\\');
+
+            // Collect every fileTable key that matches the prefix.
+            // fileTable keys have a leading backslash (e.g. "\ui\config\options.gas"),
+            // so we strip it before comparing.
+            var matches = new List<string>();
+            foreach (string key in fileTable.Keys)
             {
-                MessageBox.Show("Please select a file or folder.");
-                return;
+                string normalised = key.TrimStart('\\');
+                // Exact file match  OR  folder prefix match (prefix + backslash)
+                if (normalised.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+                    normalised.StartsWith(prefix + "\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    matches.Add(key);
+                }
             }
 
-            // 2. Identify all files to extract (Recursive)
-            List<string> filesToExtract = new List<string>();
-            CollectFilePaths(tree.SelectedNode, filesToExtract);
+            if (matches.Count == 0)
+                return 0;
 
-            if (filesToExtract.Count == 0) return;
-
-            // 3. Extract
             string basePath = Path.Combine(outputRootPath, "Extracted");
             Directory.CreateDirectory(basePath);
 
             int success = 0;
-            foreach (string fullPath in filesToExtract)
+            foreach (string key in matches)
             {
-                // Your fileTable likely expects the leading backslash
-                string key = fullPath.StartsWith("\\") ? fullPath : "\\" + fullPath;
+                if (!fileTable.TryGetValue(key, out var entry))
+                    continue;
 
-                if (fileTable.TryGetValue(key, out var entry))
-                {
-                    // Remove the leading slash for the OS path
-                    string relativePath = key.TrimStart('\\');
-                    string dest = Path.Combine(basePath, relativePath);
+                string relativePath = key.TrimStart('\\');
+                string dest = Path.Combine(basePath, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
 
-                    // Ensure subdirectories exist before extracting
-                    Directory.CreateDirectory(Path.GetDirectoryName(dest));
-
-                    if (ExtractSingleFile(entry, dest))
-                        success++;
-                }
+                if (ExtractSingleFile(entry, dest))
+                    success++;
             }
 
-            MessageBox.Show($"✅ Successfully extracted {success} files.", "Done");
+            return success;
         }
 
-        /// <summary>
-        /// Recursively finds all "leaf" nodes (files) under the selected node.
-        /// </summary>
-        private void CollectFilePaths(TreeNode node, List<string> fileList)
-        {
-            // If it has no children, it's a file
-            if (node.Nodes.Count == 0)
-            {
-                fileList.Add(node.FullPath);
-            }
-            else
-            {
-                // If it has children, it's a folder, so recurse into them
-                foreach (TreeNode child in node.Nodes)
-                {
-                    CollectFilePaths(child, fileList);
-                }
-            }
-        }
     }
 }

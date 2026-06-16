@@ -1,4 +1,4 @@
-﻿namespace DS2_Tank_Viewer
+﻿/*namespace DS2_Tank_Viewer
 {
     partial class DS2TankEditor
     {
@@ -210,4 +210,4 @@
         private TreeView treeViewExplorer;
         private Label label2;
     }
-}
+}*/
