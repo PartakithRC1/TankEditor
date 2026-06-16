@@ -600,5 +600,21 @@ namespace DS2_Tank_Viewer
             return success;
         }
 
+        public string ReadFileAsText(string relativePath)
+        {
+            // Normalise to the format fileTable uses (leading backslash)
+            string key = relativePath.Replace('/', '\\');
+            if (!key.StartsWith("\\")) key = "\\" + key;
+
+            if (!fileTable.TryGetValue(key, out var entry))
+                return null;
+
+            // Decompress / read the raw bytes using your existing logic
+            byte[] data = DecompressFile(entry); // rename/alias your existing decompress call here
+
+            // DS2 .gas files are ASCII or UTF-8 (no BOM)
+            return System.Text.Encoding.UTF8.GetString(data);
+        }
+
     }
 }

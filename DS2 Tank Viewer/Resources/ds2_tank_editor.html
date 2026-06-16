@@ -3,1028 +3,1579 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DS2 Tank Editor</title>
+<title>DSII Tank Editor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.30.0/dist/tabler-icons.min.css">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;500;600&family=Syne:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@600;700&display=swap');
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --bg:        #0f1117;
-    --bg2:       #161820;
-    --bg3:       #1e2030;
-    --bg4:       #252840;
-    --border:    #2a2d45;
-    --border2:   #363a5a;
-    --text:      #cdd6f4;
-    --muted:     #6c7086;
-    --accent:    #89b4fa;
-    --accent2:   #b4befe;
-    --green:     #a6e3a1;
-    --red:       #f38ba8;
-    --yellow:    #f9e2af;
-    --orange:    #fab387;
-    --teal:      #94e2d5;
-    --mauve:     #cba6f7;
-    --folder-c:  #f9e2af;
-    --file-c:    #89dceb;
-  }
+:root {
+  --bg:        #0f1117;
+  --bg2:       #161820;
+  --bg3:       #1e2030;
+  --bg4:       #252840;
+  --bg5:       #2e3150;
+  --border:    #2a2d45;
+  --border2:   #3a3f62;
+  --text:      #cdd6f4;
+  --muted:     #7c809a;
+  --subtle:    #45475a;
+  --accent:    #89b4fa;
+  --green:     #a6e3a1;
+  --red:       #f38ba8;
+  --yellow:    #f9e2af;
+  --orange:    #fab387;
+  --mauve:     #cba6f7;
+  --sky:       #89dceb;
+  --folder-c:  #f9e2af;
+  --file-c:    #89dceb;
+  --proj-c:    #a6e3a1;
+  --editor-bg: #12131a;
+  --act-w:     46px;
+  --sidebar-w: 260px;
+}
 
-  html, body {
-    height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Lato', monospace;
-    font-size: 13px;
-    overflow: hidden;
-    user-select: none;
-  }
+html, body {
+  height: 100%; width: 100%;
+  background: var(--bg); color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; overflow: hidden;
+  user-select: none;
+}
 
-  /* ── Layout ─────────────────────────────────────────── */
-  #app {
-    display: grid;
-    grid-template-rows: 48px 1fr;
-    grid-template-columns: 220px 1fr;
-    height: 100vh;
-  }
+/* ═══════════════════════════════════════════════
+   APP SHELL — flex column: titlebar + body-row
+═══════════════════════════════════════════════ */
+#app {
+  display: flex; flex-direction: column;
+  height: 100vh; width: 100vw; overflow: hidden;
+}
 
-  /* ── Titlebar ───────────────────────────────────────── */
-  #titlebar {
-    grid-column: 1 / -1;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-    gap: 12px;
-    -webkit-app-region: drag;
-  }
-  #titlebar .logo {
-    font-family: 'Syne', sans-serif;
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--accent);
-    letter-spacing: 0.05em;
-  }
-  #titlebar .sep { color: var(--border2); }
-  #titlebar .file-name {
-    color: var(--muted);
-    font-size: 12px;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  #titlebar .version {
-    font-size: 11px;
-    color: var(--border2);
-  }
+/* ── Titlebar ── */
+#titlebar {
+  height: 40px; flex-shrink: 0;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; padding: 0 14px;
+  -webkit-app-region: drag;
+}
+.tl-logo { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--accent); letter-spacing: .05em; }
+.tl-sep  { color: var(--border2); }
+.tl-fname{ color: var(--muted); font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-ver  { font-size: 10px; color: var(--subtle); }
 
-  /* ── Sidebar ────────────────────────────────────────── */
-  #sidebar {
-    background: var(--bg2);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .sidebar-section {
-    padding: 12px 8px 6px;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-  .btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px 10px;
-    background: transparent;
-    border: none;
-    color: var(--text);
-    font-family: 'Lato', monospace;
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: 6px;
-    text-align: left;
-    transition: background 0.12s, color 0.12s;
-    -webkit-app-region: no-drag;
-  }
-  .btn:hover { background: var(--bg3); }
-  .btn:active { background: var(--bg4); }
-  .btn .icon { font-size: 15px; width: 18px; flex-shrink: 0; }
-  .btn.primary { color: var(--accent); }
-  .btn.primary:hover { background: rgba(137,180,250,0.1); }
-  .btn.success { color: var(--green); }
-  .btn.success:hover { background: rgba(166,227,161,0.1); }
-  .btn.warning { color: var(--orange); }
-  .btn.warning:hover { background: rgba(250,179,135,0.1); }
-  .btn.danger  { color: var(--red); }
-  .btn.danger:hover  { background: rgba(243,139,168,0.1); }
-  .btn.mauve   { color: var(--mauve); }
-  .btn.mauve:hover   { background: rgba(203,166,247,0.1); }
-  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+/* ── Body row: activity bar + sidebar + splitter + main ── */
+#body-row {
+  flex: 1; display: flex; overflow: hidden; min-height: 0;
+}
 
-  .divider { border: none; border-top: 1px solid var(--border); margin: 6px 8px; }
+/* ═══════════════════════════════════════════════
+   ACTIVITY BAR
+═══════════════════════════════════════════════ */
+#activity-bar {
+  width: var(--act-w); flex-shrink: 0;
+  background: var(--bg2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 8px 0; gap: 2px;
+}
+.act-btn {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; cursor: pointer; border: none;
+  background: transparent; color: var(--muted); font-size: 20px;
+  transition: background .12s, color .12s; position: relative;
+  -webkit-app-region: no-drag;
+}
+.act-btn:hover  { background: var(--bg4); color: var(--text); }
+.act-btn.active { color: var(--accent); background: rgba(137,180,250,.13); }
+.act-btn .badge {
+  position: absolute; top: 5px; right: 5px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--orange); border: 2px solid var(--bg2); display: none;
+}
+.act-btn .badge.show { display: block; }
+.act-spacer { flex: 1; }
+.act-sep { width: 26px; height: 1px; background: var(--border); margin: 4px 0; }
 
-  .sidebar-spacer { flex: 1; }
+/* ═══════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════ */
+#sidebar {
+  width: var(--sidebar-w); min-width: 160px; max-width: 600px;
+  flex-shrink: 0;
+  background: var(--bg2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel { display: none; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+.panel.active { display: flex; }
 
-  .sidebar-footer {
-    padding: 10px 12px;
-    font-size: 10px;
-    color: var(--border2);
-    border-top: 1px solid var(--border);
-    letter-spacing: 0.06em;
-  }
+/* panel header */
+.panel-header {
+  height: 36px; flex-shrink: 0;
+  padding: 0 12px;
+  font-size: 10px; font-weight: 600; color: var(--muted);
+  letter-spacing: .12em; text-transform: uppercase;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.ph-actions { display: flex; gap: 2px; }
+.ph-btn {
+  width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  border-radius: 5px; cursor: pointer; color: var(--muted); font-size: 15px;
+  background: transparent; border: none; transition: background .1s, color .1s;
+}
+.ph-btn:hover { background: var(--bg4); color: var(--text); }
 
-  /* ── Main / Tree Panel ──────────────────────────────── */
-  #main {
-    background: var(--bg);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
+/* sidebar action buttons */
+.sidebar-actions {
+  padding: 8px 8px 6px; display: flex; flex-direction: column;
+  gap: 3px; flex-shrink: 0; border-bottom: 1px solid var(--border);
+}
+.s-btn {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px;
+  background: transparent; border: none; border-radius: 6px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  cursor: pointer; text-align: left; transition: background .1s;
+}
+.s-btn:hover   { background: var(--bg3); }
+.s-btn:active  { background: var(--bg5); }
+.s-btn .si     { font-size: 16px; width: 20px; flex-shrink: 0; }
+.s-btn.accent  { color: var(--accent); }
+.s-btn.green   { color: var(--green); }
+.s-btn.orange  { color: var(--orange); }
+.s-btn.sky     { color: var(--sky); }
+.s-btn.red     { color: var(--red); }
+.s-btn:disabled{ opacity: .3; cursor: not-allowed; }
+.s-sep { border: none; border-top: 1px solid var(--border); margin: 3px 0; }
 
-  #toolbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .tool-btn {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--text);
-    font-family: 'Lato', monospace;
-    font-size: 11px;
-    cursor: pointer;
-    transition: background 0.12s, border-color 0.12s;
-  }
-  .tool-btn:hover { background: var(--bg4); border-color: var(--border2); }
-  .tool-btn:active { background: var(--bg4); }
-  .tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .tool-btn .ti { font-size: 14px; }
+/* panel scrollable area */
+.panel-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 4px 0; min-height: 0;
+}
+.panel-scroll::-webkit-scrollbar { width: 5px; }
+.panel-scroll::-webkit-scrollbar-track { background: transparent; }
+.panel-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
-  .toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
-  .toolbar-spacer { flex: 1; }
-  #search-box {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--text);
-    font-family: 'Lato', monospace;
-    font-size: 11px;
-    padding: 4px 8px 4px 28px;
-    width: 180px;
-    outline: none;
-    transition: border-color 0.12s;
-  }
-  #search-box::placeholder { color: var(--muted); }
-  #search-box:focus { border-color: var(--accent); }
-  .search-wrap { position: relative; }
-  .search-wrap .ti {
-    position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
-    color: var(--muted); font-size: 13px; pointer-events: none;
-  }
+/* sidebar footer */
+.sidebar-footer {
+  padding: 8px 12px; font-size: 10px; color: var(--subtle);
+  border-top: 1px solid var(--border); flex-shrink: 0;
+}
 
-  /* stats bar */
-  #stats {
-    padding: 4px 12px;
-    font-size: 10px;
-    color: var(--muted);
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    gap: 16px;
-    flex-shrink: 0;
-  }
-  #stats span { color: var(--text); }
+/* tree empty state */
+.tree-empty {
+  padding: 24px 16px; text-align: center;
+  color: var(--muted); font-size: 11.5px; line-height: 1.8;
+}
+.tree-empty i { font-size: 32px; color: var(--subtle); display: block; margin-bottom: 10px; }
 
-  /* ── Tree View ──────────────────────────────────────── */
-  #tree-container {
-    flex: 1;
-    overflow: auto;
-    padding: 6px 0;
-  }
-  #tree-container::-webkit-scrollbar { width: 6px; height: 6px; }
-  #tree-container::-webkit-scrollbar-track { background: transparent; }
-  #tree-container::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+/* ═══════════════════════════════════════════════
+   DRAG SPLITTER
+═══════════════════════════════════════════════ */
+#splitter {
+  width: 4px; flex-shrink: 0;
+  background: var(--border);
+  cursor: col-resize;
+  transition: background .15s;
+  position: relative; z-index: 10;
+}
+#splitter:hover, #splitter.dragging { background: var(--accent); }
 
-  .tree-node {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 8px;
-    cursor: pointer;
-    border-radius: 4px;
-    margin: 0 4px;
-    white-space: nowrap;
-    font-size: 12px;
-    transition: background 0.08s;
-  }
-  .tree-node:hover { background: var(--bg3); }
-  .tree-node.selected { background: rgba(137,180,250,0.15); }
-  .tree-node .toggle {
-    width: 14px; height: 14px;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--muted); font-size: 11px; flex-shrink: 0;
-    transition: transform 0.15s;
-  }
-  .tree-node.open > .toggle { transform: rotate(90deg); }
-  .tree-node .node-icon { font-size: 14px; flex-shrink: 0; }
-  .tree-node.folder .node-icon { color: var(--folder-c); }
-  .tree-node.file .node-icon   { color: var(--file-c); }
-  .tree-node .label { overflow: hidden; text-overflow: ellipsis; }
-  .tree-node .ext { color: var(--muted); }
-  .tree-children { display: none; }
-  .tree-children.visible { display: block; }
+/* ═══════════════════════════════════════════════
+   TREE NODES
+═══════════════════════════════════════════════ */
+.tree-node {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px; margin: 0 4px; border-radius: 5px;
+  cursor: pointer; white-space: nowrap; font-size: 12px;
+  min-height: 26px; transition: background .08s;
+}
+.tree-node:hover   { background: var(--bg3); }
+.tree-node.selected{ background: rgba(137,180,250,.18); }
 
-  /* empty state */
-  #empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    color: var(--muted);
-    padding: 40px;
-    text-align: center;
-  }
-  #empty-state .big-icon { font-size: 48px; color: var(--border2); }
-  #empty-state h3 { font-family: 'Syne', sans-serif; font-size: 15px; color: var(--text); }
-  #empty-state p { font-size: 11px; line-height: 1.7; }
+.tree-node .toggle {
+  width: 14px; height: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 11px;
+  transition: transform .14s;
+}
+.tree-node.open > .toggle { transform: rotate(90deg); }
+.tree-node .ni { font-size: 15px; flex-shrink: 0; }
+.tree-node.folder .ni { color: var(--folder-c); }
+.tree-node.file   .ni { color: var(--file-c); }
+.tree-node .lbl  { flex: 1; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.tree-node .ext  { color: var(--muted); }
+.tree-node .dirty-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--orange); flex-shrink: 0; display: none;
+}
+.tree-node .dirty-dot.show { display: block; }
+.tree-node .node-actions { display: none; gap: 2px; margin-left: auto; }
+.tree-node:hover .node-actions { display: flex; }
+.node-act-btn {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; border: none; background: transparent;
+  cursor: pointer; color: var(--muted); font-size: 13px;
+}
+.node-act-btn:hover { background: var(--bg5); color: var(--text); }
+.tree-children { display: none; }
+.tree-children.visible { display: block; }
 
-  /* ── Toast / Notification ───────────────────────────── */
-  #toast-container {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    z-index: 1000;
-  }
-  .toast {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    background: var(--bg3);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    font-size: 12px;
-    max-width: 320px;
-    animation: slideIn 0.2s ease;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  }
-  .toast.success { border-left: 3px solid var(--green); }
-  .toast.error   { border-left: 3px solid var(--red); }
-  .toast.info    { border-left: 3px solid var(--accent); }
-  .toast.warning { border-left: 3px solid var(--yellow); }
-  .toast .t-icon { font-size: 16px; flex-shrink: 0; }
-  .toast.success .t-icon { color: var(--green); }
-  .toast.error   .t-icon { color: var(--red); }
-  .toast.info    .t-icon { color: var(--accent); }
-  .toast.warning .t-icon { color: var(--yellow); }
-  .toast .t-body { flex: 1; }
-  .toast .t-title { font-weight: 500; margin-bottom: 2px; color: var(--text); }
-  .toast .t-msg   { color: var(--muted); font-size: 11px; line-height: 1.5; }
-  .toast .t-close { color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 2px; }
-  .toast .t-close:hover { color: var(--text); }
-  @keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: none; } }
+/* project group header */
+.proj-group-hdr {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px 4px 8px; margin: 2px 4px 0;
+  font-size: 10.5px; font-weight: 600; color: var(--proj-c);
+  letter-spacing: .05em; text-transform: uppercase;
+  cursor: pointer; border-radius: 5px;
+}
+.proj-group-hdr:hover { background: var(--bg3); }
+.proj-group-hdr .toggle { font-size: 11px; color: var(--muted); transition: transform .14s; }
+.proj-group-hdr.open .toggle { transform: rotate(90deg); }
+.proj-group-children { display: none; }
+.proj-group-children.visible { display: block; }
 
-  /* ── Modal ──────────────────────────────────────────── */
-  #modal-backdrop {
-    display: none;
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 500;
-    align-items: center;
-    justify-content: center;
-  }
-  #modal-backdrop.open { display: flex; }
-  .modal {
-    background: var(--bg2);
-    border: 1px solid var(--border2);
-    border-radius: 10px;
-    padding: 24px;
-    width: 480px;
-    max-width: 90vw;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
-  }
-  .modal-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 20px;
-  }
-  .modal-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 15px; font-weight: 700;
-    color: var(--accent);
-  }
-  .modal-close {
-    background: none; border: none;
-    color: var(--muted); cursor: pointer; font-size: 18px; padding: 2px;
-  }
-  .modal-close:hover { color: var(--text); }
-  .form-row {
-    display: flex; flex-direction: column; gap: 5px;
-    margin-bottom: 14px;
-  }
-  .form-row label {
-    font-size: 10px; font-weight: 600;
-    color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
-  }
-  .form-row input[type=text],
-  .form-row input[type=number] {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--text);
-    font-family: 'Lato', monospace;
-    font-size: 12px;
-    padding: 7px 10px;
-    outline: none;
-    transition: border-color 0.12s;
-    width: 100%;
-  }
-  .form-row input:focus { border-color: var(--accent); }
-  .form-row .input-group { display: flex; gap: 6px; }
-  .form-row .input-group input { flex: 1; }
-  .form-row .input-group .browse-btn {
-    padding: 7px 12px;
-    background: var(--bg4);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--text);
-    font-family: 'Lato', monospace;
-    font-size: 11px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .form-row .input-group .browse-btn:hover { border-color: var(--border2); }
-  .checkbox-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 0; cursor: pointer;
-  }
-  .checkbox-row input[type=checkbox] {
-    accent-color: var(--accent);
-    width: 14px; height: 14px;
-  }
-  .checkbox-row .cb-label { font-size: 12px; color: var(--text); }
-  .checkbox-row .cb-desc  { font-size: 10px; color: var(--muted); margin-left: auto; }
-  .form-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
-  .modal-actions {
-    display: flex; justify-content: flex-end; gap: 8px;
-    margin-top: 20px;
-  }
-  .modal-btn {
-    padding: 8px 18px;
-    border-radius: 6px;
-    font-family: 'Lato', monospace;
-    font-size: 12px;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    transition: background 0.12s;
-  }
-  .modal-btn.cancel { background: var(--bg3); color: var(--muted); }
-  .modal-btn.cancel:hover { color: var(--text); }
-  .modal-btn.confirm { background: rgba(137,180,250,0.15); border-color: var(--accent); color: var(--accent); }
-  .modal-btn.confirm:hover { background: rgba(137,180,250,0.25); }
-  .modal-btn.confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+/* ═══════════════════════════════════════════════
+   MAIN AREA
+═══════════════════════════════════════════════ */
+#main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--editor-bg);
+}
 
-  /* progress bar inside modal */
-  .progress-wrap { margin: 10px 0; display: none; }
-  .progress-bar {
-    height: 3px; background: var(--border);
-    border-radius: 2px; overflow: hidden;
-  }
-  .progress-fill {
-    height: 100%; background: var(--accent);
-    width: 0%; transition: width 0.3s;
-    border-radius: 2px;
-  }
-  .progress-label { font-size: 10px; color: var(--muted); margin-top: 5px; }
+/* tab bar */
+#tab-bar {
+  height: 36px; flex-shrink: 0;
+  display: flex; align-items: stretch;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  overflow-x: auto; overflow-y: hidden;
+}
+#tab-bar::-webkit-scrollbar { height: 3px; }
+#tab-bar::-webkit-scrollbar-thumb { background: var(--border2); }
 
-  /* context menu */
-  #ctx-menu {
-    display: none;
-    position: fixed;
-    background: var(--bg3);
-    border: 1px solid var(--border2);
-    border-radius: 7px;
-    padding: 4px;
-    z-index: 900;
-    min-width: 160px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-  }
-  #ctx-menu.open { display: block; }
-  .ctx-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--text);
-  }
-  .ctx-item:hover { background: var(--bg4); }
-  .ctx-item .ti { font-size: 14px; color: var(--muted); }
-  .ctx-sep { border: none; border-top: 1px solid var(--border); margin: 3px 0; }
+.tab {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 14px; min-width: 130px; max-width: 210px;
+  cursor: pointer; border-right: 1px solid var(--border);
+  color: var(--muted); font-size: 12px; white-space: nowrap;
+  flex-shrink: 0; transition: background .1s, color .1s;
+  position: relative;
+}
+.tab:hover  { background: var(--bg3); color: var(--text); }
+.tab.active { background: var(--editor-bg); color: var(--text); }
+.tab.active::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px; background: var(--accent);
+}
+.tab .tab-icon  { font-size: 13px; flex-shrink: 0; }
+.tab .tab-name  { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tab .tab-dirty { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); flex-shrink: 0; display: none; }
+.tab .tab-dirty.show { display: block; }
+.tab .tab-close {
+  font-size: 14px; color: var(--muted); border-radius: 3px;
+  padding: 1px 2px; opacity: 0; background: none; border: none;
+  cursor: pointer; transition: opacity .1s;
+}
+.tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
+.tab .tab-close:hover { background: var(--bg5); color: var(--red); }
+.tab-spacer { flex: 1; }
+
+/* editor area */
+#editor-area {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden; position: relative;
+}
+
+/* welcome screen */
+#welcome {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 14px; color: var(--muted); padding: 40px; text-align: center;
+}
+#welcome .w-icon { font-size: 52px; color: var(--border2); }
+#welcome h2 { font-family: 'Syne', sans-serif; font-size: 17px; color: var(--text); }
+#welcome p  { font-size: 11.5px; line-height: 1.8; max-width: 320px; }
+.shortcut-grid {
+  margin-top: 6px; display: grid;
+  grid-template-columns: 1fr 1fr; gap: 7px 20px; text-align: left;
+}
+.sc-row { display: flex; gap: 10px; align-items: center; font-size: 11px; }
+kbd {
+  background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 4px; padding: 1px 7px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text);
+}
+
+/* editor wrapper */
+#editor-wrapper { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
+#editor-wrapper.active { display: flex; }
+
+/* unsaved bar */
+#unsaved-bar {
+  padding: 5px 14px; font-size: 11px; color: var(--yellow);
+  background: rgba(249,226,175,.07); border-bottom: 1px solid rgba(249,226,175,.18);
+  display: none; align-items: center; gap: 10px; flex-shrink: 0;
+}
+#unsaved-bar.show { display: flex; }
+#unsaved-bar a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+/* breadcrumb */
+#breadcrumb {
+  height: 26px; flex-shrink: 0;
+  padding: 0 14px; font-size: 11px; color: var(--muted);
+  border-bottom: 1px solid var(--border); background: var(--bg2);
+  display: flex; align-items: center; gap: 4px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.bc-sep { color: var(--subtle); }
+.bc-last { color: var(--text); }
+
+/* editor toolbar */
+#editor-toolbar {
+  height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 8px; background: var(--bg2); border-bottom: 1px solid var(--border);
+}
+.et-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+  cursor: pointer; transition: background .1s; white-space: nowrap;
+}
+.et-btn:hover { background: var(--bg4); border-color: var(--border2); }
+.et-btn .ti  { font-size: 14px; }
+.et-btn.green  { color: var(--green); }
+.et-btn.orange { color: var(--orange); }
+.et-btn.red    { color: var(--red); }
+.et-btn:disabled { opacity: .3; cursor: not-allowed; }
+.et-sep     { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+.et-spacer  { flex: 1; }
+
+/* find bar */
+#find-bar {
+  display: none; align-items: center; gap: 6px;
+  background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 6px; padding: 3px 8px;
+}
+#find-input, #replace-input {
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  width: 140px;
+}
+#find-input::placeholder, #replace-input::placeholder { color: var(--muted); }
+.fb-sep   { width: 1px; height: 14px; background: var(--border2); }
+.fb-count { font-size: 10px; color: var(--muted); white-space: nowrap; min-width: 60px; }
+
+/* CodeMirror wrapper — must fill remaining space */
+#cm-wrapper {
+  flex: 1; min-height: 0; overflow: hidden; position: relative;
+}
+.CodeMirror {
+  height: 100% !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 13px !important;
+  background: var(--editor-bg) !important;
+  color: #cdd6f4 !important;
+  line-height: 1.7 !important;
+}
+.CodeMirror-scroll  { padding-bottom: 120px !important; }
+.CodeMirror-gutters { background: var(--editor-bg) !important; border-right: 1px solid var(--border) !important; }
+.CodeMirror-linenumber  { color: var(--subtle) !important; min-width: 36px; }
+.CodeMirror-cursor      { border-left: 2px solid var(--accent) !important; }
+.CodeMirror-selected    { background: rgba(137,180,250,.18) !important; }
+.CodeMirror-activeline-background { background: rgba(255,255,255,.025) !important; }
+
+/* GAS syntax colours */
+.cm-s-material-darker .cm-keyword   { color: #cba6f7 !important; font-weight: 600; }
+.cm-s-material-darker .cm-def       { color: #89dceb !important; }
+.cm-s-material-darker .cm-builtin   { color: #a6e3a1 !important; }
+.cm-s-material-darker .cm-variable  { color: #cdd6f4 !important; }
+.cm-s-material-darker .cm-variable-2{ color: #89b4fa !important; }
+.cm-s-material-darker .cm-atom      { color: #f9e2af !important; font-style: italic; }
+.cm-s-material-darker .cm-number    { color: #fab387 !important; }
+.cm-s-material-darker .cm-string    { color: #a6e3a1 !important; }
+.cm-s-material-darker .cm-comment   { color: #6c7086 !important; font-style: italic; }
+.cm-s-material-darker .cm-operator  { color: #89b4fa !important; }
+.cm-s-material-darker .cm-meta      { color: #f38ba8 !important; }
+
+/* status bar */
+#statusbar {
+  height: 24px; flex-shrink: 0;
+  padding: 0 12px; font-size: 11px; color: var(--muted);
+  background: var(--bg2); border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px;
+}
+#statusbar .sb-right { margin-left: auto; display: flex; gap: 14px; }
+#statusbar span { color: var(--text); }
+#statusbar .sb-label { color: var(--muted); }
+
+/* ═══════════════════════════════════════════════
+   MODAL
+═══════════════════════════════════════════════ */
+#modal-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.65); z-index: 500;
+  align-items: center; justify-content: center;
+}
+#modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 10px; padding: 24px;
+  width: 500px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0,0,0,.7);
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.modal-title  { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--accent); }
+.modal-close  { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; }
+.modal-close:hover { color: var(--text); }
+.form-row     { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.form-row label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.form-row input[type=text] {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  padding: 8px 10px; outline: none; width: 100%; transition: border-color .12s;
+}
+.form-row input[type=text]:focus { border-color: var(--accent); }
+.form-row .ig { display: flex; gap: 6px; }
+.form-row .ig input { flex: 1; }
+.browse-btn {
+  padding: 8px 12px; background: var(--bg4); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; cursor: pointer; white-space: nowrap;
+}
+.browse-btn:hover { border-color: var(--border2); }
+.cb-row { display: flex; align-items: center; gap: 9px; padding: 5px 0; cursor: pointer; }
+.cb-row input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+.cb-row .cb-l { font-size: 12px; color: var(--text); }
+.cb-row .cb-d { font-size: 10.5px; color: var(--muted); margin-left: auto; }
+.form-div     { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+.modal-actions{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.modal-btn {
+  padding: 8px 18px; border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  cursor: pointer; border: 1px solid var(--border); transition: background .1s;
+}
+.modal-btn.cancel  { background: var(--bg3); color: var(--muted); }
+.modal-btn.cancel:hover  { color: var(--text); }
+.modal-btn.confirm { background: rgba(137,180,250,.12); border-color: var(--accent); color: var(--accent); }
+.modal-btn.confirm:hover { background: rgba(137,180,250,.22); }
+.modal-btn.confirm:disabled { opacity: .4; cursor: not-allowed; }
+.progress-wrap  { display: none; margin: 12px 0; }
+.progress-bar   { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.progress-fill  { height: 100%; width: 0%; background: var(--accent); transition: width .3s; border-radius: 2px; }
+.progress-label { font-size: 10.5px; color: var(--muted); margin-top: 5px; }
+
+/* ═══════════════════════════════════════════════
+   CONTEXT MENU
+═══════════════════════════════════════════════ */
+#ctx-menu {
+  display: none; position: fixed;
+  background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 4px; z-index: 900;
+  min-width: 175px; box-shadow: 0 10px 36px rgba(0,0,0,.65);
+}
+#ctx-menu.open { display: block; }
+.ctx-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 11px; border-radius: 5px;
+  cursor: pointer; font-size: 12px; color: var(--text);
+}
+.ctx-item:hover { background: var(--bg4); }
+.ctx-item .ti  { font-size: 15px; color: var(--muted); }
+.ctx-item.red  { color: var(--red); }
+.ctx-item.red .ti { color: var(--red); }
+.ctx-sep { border: none; border-top: 1px solid var(--border); margin: 3px 0; }
+
+/* ═══════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════ */
+#toast-container {
+  position: fixed; bottom: 20px; right: 20px;
+  display: flex; flex-direction: column; gap: 8px; z-index: 1000;
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; background: var(--bg3);
+  border: 1px solid var(--border2); border-radius: 9px;
+  font-size: 12px; max-width: 330px;
+  animation: toastIn .18s ease; box-shadow: 0 6px 24px rgba(0,0,0,.55);
+  pointer-events: all;
+}
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error   { border-left: 3px solid var(--red); }
+.toast.info    { border-left: 3px solid var(--accent); }
+.toast.warning { border-left: 3px solid var(--yellow); }
+.toast .ti-icon{ font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+.toast.success .ti-icon { color: var(--green); }
+.toast.error   .ti-icon { color: var(--red); }
+.toast.info    .ti-icon { color: var(--accent); }
+.toast.warning .ti-icon { color: var(--yellow); }
+.toast-body    { flex: 1; }
+.toast-title   { font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.toast-msg     { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.toast-close   { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; }
+.toast-close:hover { color: var(--text); }
+@keyframes toastIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:none; } }
+
+/* search panel input */
+#gs-input {
+  width: 100%; padding: 7px 10px; margin-bottom: 6px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text);
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none;
+}
+#gs-input:focus { border-color: var(--accent); }
+.gs-result {
+  padding: 6px 12px; cursor: pointer; border-radius: 4px; margin: 1px 4px;
+}
+.gs-result:hover { background: var(--bg3); }
+.gs-fname { font-size: 11px; color: var(--accent); }
+.gs-line  { font-size: 10.5px; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 </head>
 <body>
-
 <div id="app">
 
-  <!-- Titlebar -->
+  <!-- TITLEBAR -->
   <div id="titlebar">
-    <span class="logo"> DSII Tank Editor</span>
-    <span class="sep">·</span>
-    <span class="file-name" id="title-filename">No file loaded</span>
-    <span class="version">v1.0.4</span>
+    <span class="tl-logo">DSII Tank Editor</span>
+    <span class="tl-sep">·</span>
+    <span class="tl-fname" id="title-filename">No file loaded</span>
+    <span class="tl-ver">v1.1.0</span>
   </div>
 
-  <!-- Sidebar -->
-  <div id="sidebar">
-    <div class="sidebar-section">File</div>
-    <button class="btn primary" onclick="window.chrome.webview.postMessage({cmd:'loadTank'})">
-      <i class="ti ti-package-import icon"></i> Load DS2 Tank
-    </button>
+  <!-- BODY ROW -->
+  <div id="body-row">
 
-    <div class="divider"></div>
-    <div class="sidebar-section">Extract</div>
-    <button class="btn success" id="btn-extract-all" disabled onclick="window.chrome.webview.postMessage({cmd:'extractAll'})">
-      <i class="ti ti-download icon"></i> Extract All
-    </button>
-    <button class="btn success" id="btn-extract-sel" disabled onclick="postExtractSelected()">
-      <i class="ti ti-file-download icon"></i> Extract Selected
-    </button>
-
-    <div class="divider"></div>
-    <div class="sidebar-section">Pack</div>
-    <button class="btn warning" onclick="openRtcModal()">
-      <i class="ti ti-archive icon"></i> Pack via RTC
-    </button>
-    <button class="btn danger" onclick="showToast('info','C# Packing','Packing via C# is temporarily disabled. Use RTC instead.')">
-      <i class="ti ti-box icon"></i> Pack via C#
-    </button>
-
-    <div class="sidebar-spacer"></div>
-    <div class="sidebar-footer">DS2 Tank Editor · v1.0.3</div>
-  </div>
-
-  <!-- Main Panel -->
-  <div id="main">
-    <div id="toolbar">
-      <button class="tool-btn" id="tb-collapse" disabled onclick="collapseAll()">
-        <i class="ti ti-arrows-minimize"></i> Collapse
+    <!-- ACTIVITY BAR -->
+    <div id="activity-bar">
+      <button class="act-btn active" id="act-explorer" title="Explorer" onclick="switchPanel('explorer')">
+        <i class="ti ti-package"></i>
       </button>
-      <button class="tool-btn" id="tb-expand" disabled onclick="expandAll()">
-        <i class="ti ti-arrows-maximize"></i> Expand
+      <button class="act-btn" id="act-projects" title="Projects" onclick="switchPanel('projects')">
+        <i class="ti ti-folder-code"></i>
+        <span class="badge" id="proj-badge"></span>
       </button>
-      <div class="toolbar-sep"></div>
-      <button class="tool-btn" id="tb-extract-sel" disabled onclick="postExtractSelected()">
-        <i class="ti ti-file-download"></i> Extract Selected
-      </button>
-      <div class="toolbar-spacer"></div>
-      <div class="search-wrap">
+      <div class="act-sep"></div>
+      <button class="act-btn" id="act-search" title="Search in files" onclick="switchPanel('search')">
         <i class="ti ti-search"></i>
-        <input type="text" id="search-box" placeholder="Search files..." oninput="filterTree(this.value)">
+      </button>
+      <div class="act-spacer"></div>
+      <button class="act-btn" title="About" onclick="showToast('info','DSII Tank Editor','v1.1.0 — IDE Edition')">
+        <i class="ti ti-info-circle"></i>
+      </button>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+
+      <!-- EXPLORER PANEL -->
+      <div class="panel active" id="panel-explorer">
+        <div class="panel-header">
+          Explorer
+          <div class="ph-actions">
+            <button class="ph-btn" title="Collapse all" onclick="collapseAll('#panel-explorer')"><i class="ti ti-arrows-minimize"></i></button>
+            <button class="ph-btn" title="Expand all"   onclick="expandAll('#panel-explorer')"><i class="ti ti-arrows-maximize"></i></button>
+          </div>
+        </div>
+        <div class="sidebar-actions">
+          <button class="s-btn accent" onclick="postMsg({cmd:'loadTank'})">
+            <i class="ti ti-package-import si"></i>Load DS2 Tank
+          </button>
+          <button class="s-btn green" id="btn-extract-all" disabled onclick="postMsg({cmd:'extractAll'})">
+            <i class="ti ti-download si"></i>Extract All
+          </button>
+          <button class="s-btn green" id="btn-extract-sel" disabled onclick="postExtractSelected()">
+            <i class="ti ti-file-download si"></i>Extract Selected
+          </button>
+          <div class="s-sep"></div>
+          <button class="s-btn orange" onclick="openRtcModal()">
+            <i class="ti ti-archive si"></i>Pack via RTC
+          </button>
+        </div>
+        <div class="panel-scroll" id="tree-container">
+          <div class="tree-empty">
+            <i class="ti ti-package"></i>
+            Load a .ds2res to explore its contents
+          </div>
+        </div>
+        <div class="sidebar-footer">DSII Tank Editor · v1.1.0</div>
       </div>
-    </div>
 
-    <div id="stats" style="display:none;">
-      Files: <span id="stat-files">0</span> &nbsp;·&nbsp;
-      Folders: <span id="stat-folders">0</span> &nbsp;·&nbsp;
-      Showing: <span id="stat-showing">0</span>
-    </div>
+      <!-- PROJECTS PANEL -->
+      <div class="panel" id="panel-projects">
+        <div class="panel-header">
+          Projects
+          <div class="ph-actions">
+            <button class="ph-btn" title="Add project folder" onclick="postMsg({cmd:'addProject'})"><i class="ti ti-folder-plus"></i></button>
+            <button class="ph-btn" title="Refresh all"        onclick="postMsg({cmd:'refreshProjects'})"><i class="ti ti-refresh"></i></button>
+            <button class="ph-btn" title="Collapse all"       onclick="collapseAll('#panel-projects')"><i class="ti ti-arrows-minimize"></i></button>
+          </div>
+        </div>
+        <div class="panel-scroll" id="projects-container">
+          <div class="tree-empty" id="proj-empty">
+            <i class="ti ti-folder-code"></i>
+            Add a project folder to get started.<br>Projects are unpacked mod directories.
+          </div>
+        </div>
+        <div class="sidebar-actions">
+          <button class="s-btn green"  onclick="packActiveProject()"><i class="ti ti-archive si"></i>Pack Active Project</button>
+          <button class="s-btn sky"    onclick="postMsg({cmd:'addProject'})"><i class="ti ti-folder-plus si"></i>Add Project Folder</button>
+        </div>
+      </div>
 
-    <div id="empty-state">
-      <i class="ti ti-package big-icon"></i>
-      <h3>No Tank Loaded</h3>
-      <p>Click <strong style="color:var(--accent)">Load DS2 Tank</strong> to open a<br>.ds2res resource file and browse its contents.</p>
-    </div>
+      <!-- SEARCH PANEL -->
+      <div class="panel" id="panel-search">
+        <div class="panel-header">Search in Files</div>
+        <div style="padding:8px;flex-shrink:0;border-bottom:1px solid var(--border);">
+          <input id="gs-input" type="text" placeholder="Search open files…" oninput="globalSearch(this.value)">
+          <div style="display:flex;gap:12px;">
+            <label class="cb-row" style="font-size:11px;"><input type="checkbox" id="gs-case" style="accent-color:var(--accent)"> Case-sensitive</label>
+          </div>
+        </div>
+        <div class="panel-scroll" id="search-results">
+          <div class="tree-empty" style="font-size:11px;padding:16px 14px;">Type to search across open files.</div>
+        </div>
+      </div>
 
-    <div id="tree-container" style="display:none;"></div>
-  </div>
+    </div><!-- /sidebar -->
+
+    <!-- SPLITTER -->
+    <div id="splitter"></div>
+
+    <!-- MAIN -->
+    <div id="main">
+
+      <!-- TAB BAR -->
+      <div id="tab-bar">
+        <div class="tab-spacer"></div>
+      </div>
+
+      <!-- EDITOR AREA -->
+      <div id="editor-area">
+
+        <!-- Welcome -->
+        <div id="welcome">
+          <i class="ti ti-file-code w-icon"></i>
+          <h2>DSII Tank IDE</h2>
+          <p>Open a file from the Explorer or a Project to begin editing.<br>Full syntax highlighting for .gas, .skrit and more.</p>
+          <div class="shortcut-grid">
+            <div class="sc-row"><kbd>Ctrl+S</kbd>      Save</div>
+            <div class="sc-row"><kbd>Ctrl+Z</kbd>      Undo</div>
+            <div class="sc-row"><kbd>Ctrl+F</kbd>      Find</div>
+            <div class="sc-row"><kbd>Ctrl+H</kbd>      Replace</div>
+            <div class="sc-row"><kbd>Ctrl+W</kbd>      Close tab</div>
+            <div class="sc-row"><kbd>Ctrl+Tab</kbd>    Next tab</div>
+            <div class="sc-row"><kbd>Ctrl+/</kbd>      Toggle comment</div>
+            <div class="sc-row"><kbd>Dbl-click</kbd>   Open file</div>
+          </div>
+        </div>
+
+        <!-- Editor Wrapper -->
+        <div id="editor-wrapper">
+          <div id="unsaved-bar">
+            <i class="ti ti-alert-circle"></i>
+            Unsaved changes —
+            <a onclick="saveActiveFile()">Save</a> or
+            <a onclick="revertActiveFile()">Revert</a>
+          </div>
+          <div id="breadcrumb"></div>
+          <div id="editor-toolbar">
+            <button class="et-btn green"  onclick="saveActiveFile()"    title="Ctrl+S"><i class="ti ti-device-floppy"></i> Save</button>
+            <button class="et-btn"        onclick="revertActiveFile()"  title="Revert"><i class="ti ti-rotate-clockwise-2"></i> Revert</button>
+            <div class="et-sep"></div>
+            <button class="et-btn" onclick="editorCmd('undo')" title="Ctrl+Z"><i class="ti ti-arrow-back-up"></i></button>
+            <button class="et-btn" onclick="editorCmd('redo')" title="Ctrl+Y"><i class="ti ti-arrow-forward-up"></i></button>
+            <div class="et-sep"></div>
+            <button class="et-btn" onclick="toggleFind(false)" title="Ctrl+F"><i class="ti ti-search"></i> Find</button>
+            <button class="et-btn" onclick="toggleFind(true)"  title="Ctrl+H"><i class="ti ti-replace"></i> Replace</button>
+            <div class="et-spacer"></div>
+            <!-- Find bar (inline, right side of toolbar) -->
+            <div id="find-bar">
+              <i class="ti ti-search" style="color:var(--muted);font-size:14px;"></i>
+              <input id="find-input"   placeholder="Find…"    oninput="doFind()" onkeydown="findKeydown(event)">
+              <div class="fb-sep" id="rep-sep" style="display:none;"></div>
+              <input id="replace-input" placeholder="Replace…" style="display:none;" onkeydown="repKeydown(event)">
+              <span class="fb-count" id="find-count"></span>
+              <button class="node-act-btn" onclick="findNext()" title="Next (Enter)"><i class="ti ti-chevron-down"></i></button>
+              <button class="node-act-btn" onclick="findPrev()" title="Prev (Shift+Enter)"><i class="ti ti-chevron-up"></i></button>
+              <button class="node-act-btn" id="btn-rep-one" style="display:none;" onclick="replaceOne()" title="Replace"><i class="ti ti-replace"></i></button>
+              <button class="node-act-btn" id="btn-rep-all" style="display:none;" onclick="replaceAll()" title="Replace All"><i class="ti ti-replace-filled"></i></button>
+              <button class="node-act-btn" onclick="closeFind()"><i class="ti ti-x"></i></button>
+            </div>
+          </div>
+          <div id="cm-wrapper"></div>
+          <div id="statusbar">
+            <span class="sb-label">Mode:</span><span id="sb-mode">Plain Text</span>
+            <span class="sb-label">Ln</span><span id="sb-line">1</span>
+            <span class="sb-label">Col</span><span id="sb-col">1</span>
+            <div class="sb-right">
+              <span id="sb-size">0 B</span>
+              <span id="sb-enc">UTF-8</span>
+            </div>
+          </div>
+        </div><!-- /editor-wrapper -->
+
+      </div><!-- /editor-area -->
+    </div><!-- /main -->
+
+  </div><!-- /body-row -->
+</div><!-- /app -->
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-open"        onclick="ctxOpenFile()">  <i class="ti ti-file-text"></i>  Open in Editor</div>
+  <div class="ctx-item" id="ctx-extract"     onclick="ctxExtract()">   <i class="ti ti-download"></i>   Extract</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-pack-proj"   onclick="ctxPackProject()"  style="display:none"><i class="ti ti-archive"></i>      Pack Project</div>
+  <div class="ctx-item" id="ctx-remove-proj" onclick="ctxRemoveProject()" style="display:none"><i class="ti ti-folder-minus"></i> Remove Project</div>
+  <div class="ctx-item"                      onclick="ctxReveal()">    <i class="ti ti-folder-open"></i> Reveal in Explorer</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item"                      onclick="ctxCopyPath()">  <i class="ti ti-copy"></i>        Copy Path</div>
+  <div class="ctx-sep"  id="ctx-sep-del" style="display:none;"></div>
+  <div class="ctx-item red" id="ctx-delete"  onclick="ctxDelete()"    style="display:none"><i class="ti ti-trash"></i>            Delete File</div>
 </div>
 
-<!-- Toast Container -->
+<!-- MODAL -->
+<div id="modal-backdrop">
+  <div class="modal" id="active-modal"></div>
+</div>
+
+<!-- TOAST -->
 <div id="toast-container"></div>
 
-<!-- Context Menu -->
-<div id="ctx-menu">
-  <div class="ctx-item" onclick="ctxExtract()">
-    <i class="ti ti-download"></i> Extract
-  </div>
-  <div class="ctx-item" onclick="ctxExtractHere()">
-    <i class="ti ti-file-download"></i> Extract to…
-  </div>
-  <div class="ctx-sep"></div>
-  <div class="ctx-item" onclick="ctxCopyPath()">
-    <i class="ti ti-copy"></i> Copy path
-  </div>
-</div>
+<!-- CodeMirror core -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<!-- Addons -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/match-highlighter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/comment-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/display/autorefresh.min.js"></script>
 
-<!-- RTC Modal -->
-<div id="modal-backdrop">
-  <div class="modal">
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+// DS2 GAS / SKRIT SYNTAX
+// ═══════════════════════════════════════════════════════════════
+CodeMirror.defineMode('gas', () => {
+  const KWD  = /^(?:if|else|while|for|do|return|break|continue|new|delete|null|true|false|this|self|owner|startup|shutdown|going|state|on|when|any|all|and|or|not|trigger|allowedto|forbiddento|auto|monitor|terminate|go|send|msg)\b/;
+  const TYPE = /^(?:bool|int|float|string|goid|void|vector|aspect|event|trigger|state|object|actor|item|weapon|armor|spell|skills|inventory|object_bp|actor_bp|item_bp)\b/;
+  const BTIN = /^(?:world|Screen|App|GameTime|Gfx|Sfx|Gui|Party|Quests|Conversations|Maps|Jobs|Skills|Stats|Ai|Camera|Input|Keyboard|Mouse)\b/;
+
+  return {
+    startState: () => ({ block: false }),
+    token(stream, state) {
+      if (state.block) {
+        if (stream.match(/.*?\*\//)) { state.block = false; return 'comment'; }
+        stream.skipToEnd(); return 'comment';
+      }
+      if (stream.eatSpace()) return null;
+      if (stream.match('//'))  { stream.skipToEnd(); return 'comment'; }
+      if (stream.match('/*'))  { state.block = true; return 'comment'; }
+      if (stream.match(/"(?:[^"\\]|\\.)*"/)) return 'string';
+      if (stream.match(/'(?:[^'\\]|\\.)*'/)) return 'string';
+      if (stream.match(/0x[0-9a-fA-F]+/) || stream.match(/-?\d+\.?\d*/)) return 'number';
+      if (stream.match(/\[[\w\s:]+\]/)) return 'atom';
+      if (stream.match(/#\w+/))         return 'meta';
+      if (stream.match(/[a-zA-Z_$][\w$]*/)) {
+        const w = stream.current();
+        if (KWD.test(w))  return 'keyword';
+        if (TYPE.test(w)) return 'def';
+        if (BTIN.test(w)) return 'builtin';
+        if (/^[A-Z]/.test(w)) return 'variable-2';
+        return 'variable';
+      }
+      if (stream.match(/[+\-*/%=&|!<>^~?:,;.{}[\]()]/)) return 'operator';
+      stream.next(); return null;
+    }
+  };
+});
+CodeMirror.defineMIME('text/x-gas',   'gas');
+CodeMirror.defineMIME('text/x-skrit', 'gas');
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let editor           = null;
+let tabs             = [];
+let activeTabId      = null;
+let ctxTarget        = null;
+let projects         = [];
+let exSelPath        = null;   // explorer selected path (tank)
+let suppressChange   = false;
+let findCur          = null;
+
+// ═══════════════════════════════════════════════════════════════
+// SPLITTER — drag to resize sidebar
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const splitter = document.getElementById('splitter');
+  const sidebar  = document.getElementById('sidebar');
+  let dragging = false, startX = 0, startW = 0;
+
+  splitter.addEventListener('mousedown', e => {
+    dragging = true; startX = e.clientX; startW = sidebar.offsetWidth;
+    splitter.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const newW = Math.max(160, Math.min(600, startW + (e.clientX - startX)));
+    sidebar.style.width = newW + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    splitter.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    if (editor) editor.refresh();
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function postMsg(obj) { window.chrome?.webview?.postMessage(obj); }
+function h(s) {
+  return String(s??'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtBytes(b) {
+  if (b<1024) return b+' B';
+  if (b<1048576) return (b/1024).toFixed(1)+' KB';
+  return (b/1048576).toFixed(2)+' MB';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIVITY / PANEL
+// ═══════════════════════════════════════════════════════════════
+function switchPanel(name) {
+  document.querySelectorAll('.act-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('act-'   + name)?.classList.add('active');
+  document.getElementById('panel-' + name)?.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// C# → JS BRIDGE
+// ═══════════════════════════════════════════════════════════════
+window.ds2 = {
+  populateTree(fileList, fileCount) {
+    buildTankTree(fileList);
+    document.getElementById('btn-extract-all').disabled = false;
+    document.getElementById('title-filename').textContent = fileList[0]?.split('\\')[0] ?? 'Tank';
+    showToast('success','Tank Loaded', `${fileCount} files loaded.`);
+  },
+  setFileName(n) { document.getElementById('title-filename').textContent = n; },
+  showToast: (t,ti,m) => showToast(t,ti,m),
+  setProgress(p, l) {
+    const w = document.getElementById('progress-wrap'); if(!w) return;
+    w.style.display = 'block';
+    document.getElementById('progress-fill').style.width = p + '%';
+    document.getElementById('progress-label').textContent = l;
+    if (p >= 100) setTimeout(() => { w.style.display='none'; }, 1400);
+  },
+  onRtcSuccess(msg) { closeModal(); showToast('success','Tank Created', msg); },
+  onRtcError(msg)   { closeModal(); showToast('error','RTC Failed', msg); },
+  setBrowsedSource(p) { const el = document.getElementById('f-source'); if(el) el.value = p; },
+  setBrowsedOut(p)    { const el = document.getElementById('f-out');    if(el) el.value = p; },
+  openFileInEditor(path, content, source, projectId) { openTab(path, content, source||'tank', projectId||null); },
+  fileSaved(path) {
+    const t = tabs.find(t=>t.path===path);
+    if (t) { t.dirty = false; t.savedContent = t.content; syncTabEl(t); }
+    updateUnsavedBar();
+    showToast('success','Saved', path.split(/[\\/]/).pop());
+  },
+  fileSaveError(msg) { showToast('error','Save Failed', msg); },
+  addProject(id, name, rootPath, jsonTree) {
+    const tree = typeof jsonTree==='string' ? JSON.parse(jsonTree) : jsonTree;
+    const idx  = projects.findIndex(p=>p.id===id);
+    if (idx>=0) projects[idx] = {id,name,rootPath,tree};
+    else projects.push({id,name,rootPath,tree});
+    renderProjects();
+    document.getElementById('proj-empty').style.display = 'none';
+    document.getElementById('proj-badge').classList.add('show');
+  },
+  removeProject(id) {
+    projects = projects.filter(p=>p.id!==id);
+    renderProjects();
+    if (!projects.length) {
+      document.getElementById('proj-empty').style.display = '';
+      document.getElementById('proj-badge').classList.remove('show');
+    }
+  },
+  refreshProject(id, jsonTree) {
+    const p = projects.find(p=>p.id===id);
+    if (p) { p.tree = typeof jsonTree==='string'?JSON.parse(jsonTree):jsonTree; renderProjects(); }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// TANK TREE
+// ═══════════════════════════════════════════════════════════════
+function buildTankTree(paths) {
+  const cont = document.getElementById('tree-container');
+  cont.innerHTML = '';
+  if (!paths||!paths.length) return;
+  const root = {};
+  for (const p of paths) {
+    const parts = p.replace(/^\\/,'').split('\\');
+    let cur = root;
+    for (const pt of parts) { if(!cur[pt]) cur[pt]={}; cur=cur[pt]; }
+  }
+  renderTreeObj(root, cont, 0, 'tank', null);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROJECT TREES
+// ═══════════════════════════════════════════════════════════════
+function renderProjects() {
+  const cont = document.getElementById('projects-container');
+  cont.innerHTML = '';
+  for (const proj of projects) {
+    // Group wrapper
+    const wrap = document.createElement('div');
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.className = 'proj-group-hdr open';
+    hdr.dataset.projId = proj.id;
+    hdr.innerHTML =
+      `<i class="ti ti-chevron-right toggle"></i>` +
+      `<i class="ti ti-folder-code" style="color:var(--proj-c);font-size:15px;"></i>` +
+      `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;">${h(proj.name)}</span>` +
+      `<button class="node-act-btn" title="Options" onclick="event.stopPropagation();showProjCtx(event,'${proj.id}')"><i class="ti ti-dots-vertical"></i></button>`;
+    wrap.appendChild(hdr);
+
+    const kids = document.createElement('div');
+    kids.className = 'proj-group-children visible';
+
+    // Build obj from flat relative paths
+    const obj = {};
+    for (const relPath of (proj.tree||[])) {
+      const parts = relPath.replace(/^[\\/]/,'').split(/[\\/]/);
+      let cur = obj;
+      for (const pt of parts) { if(pt&&!cur[pt]) cur[pt]={}; if(pt) cur=cur[pt]; }
+    }
+    renderTreeObj(obj, kids, 1, 'project', proj.id);
+    wrap.appendChild(kids);
+
+    hdr.onclick = e => {
+      if (e.target.closest('.node-act-btn')) return;
+      const open = hdr.classList.toggle('open');
+      kids.classList.toggle('visible', open);
+    };
+    hdr.oncontextmenu = e => { e.preventDefault(); showProjCtx(e, proj.id); };
+    cont.appendChild(wrap);
+  }
+}
+
+function showProjCtx(e, projId) {
+  ctxTarget = { projId, isProjectRoot: true };
+  document.getElementById('ctx-open').style.display        = 'none';
+  document.getElementById('ctx-extract').style.display     = 'none';
+  document.getElementById('ctx-pack-proj').style.display   = '';
+  document.getElementById('ctx-remove-proj').style.display = '';
+  document.getElementById('ctx-sep-del').style.display     = 'none';
+  document.getElementById('ctx-delete').style.display      = 'none';
+  showCtxAt(e.clientX, e.clientY);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GENERIC TREE RENDERER
+// ═══════════════════════════════════════════════════════════════
+function renderTreeObj(obj, parent, depth, source, projectId) {
+  const keys = Object.keys(obj).sort((a,b) => {
+    const af = Object.keys(obj[a]).length>0, bf=Object.keys(obj[b]).length>0;
+    if(af&&!bf) return -1; if(!af&&bf) return 1;
+    return a.localeCompare(b, undefined, {sensitivity:'base'});
+  });
+
+  for (const key of keys) {
+    const children = obj[key];
+    const isFolder = Object.keys(children).length > 0;
+
+    const node = document.createElement('div');
+    node.className = 'tree-node ' + (isFolder ? 'folder' : 'file');
+    node.style.paddingLeft = (8 + depth*14) + 'px';
+    node.dataset.name   = key;
+    node.dataset.depth  = depth;
+    node.dataset.source = source;
+    if (projectId) node.dataset.projId = projectId;
+
+    // toggle chevron
+    const tog = document.createElement('span');
+    tog.className = 'toggle';
+    tog.innerHTML = isFolder ? '<i class="ti ti-chevron-right"></i>' : '';
+    node.appendChild(tog);
+
+    // icon
+    const ico = document.createElement('span');
+    ico.className = 'ni';
+    ico.innerHTML = isFolder ? '<i class="ti ti-folder"></i>' : fileIcon(key);
+    node.appendChild(ico);
+
+    // label
+    const lbl = document.createElement('span');
+    lbl.className = 'lbl';
+    if (!isFolder) {
+      const d = key.lastIndexOf('.');
+      lbl.innerHTML = d>0
+        ? h(key.slice(0,d)) + '<span class="ext">' + h(key.slice(d)) + '</span>'
+        : h(key);
+    } else { lbl.textContent = key; }
+    node.appendChild(lbl);
+
+    // dirty dot (projects only)
+    if (source==='project') {
+      const dd = document.createElement('span');
+      dd.className = 'dirty-dot'; dd.dataset.dirtyFor = key;
+      node.appendChild(dd);
+    }
+
+    // inline action buttons
+    const acts = document.createElement('div');
+    acts.className = 'node-actions';
+    if (!isFolder) {
+      if (source==='project') {
+        acts.innerHTML = `<button class="node-act-btn" title="Open" onclick="event.stopPropagation();openNodeFile(this.closest('.tree-node'))"><i class="ti ti-file-text"></i></button>`;
+      } else {
+        acts.innerHTML =
+          `<button class="node-act-btn" title="Open" onclick="event.stopPropagation();openNodeFile(this.closest('.tree-node'))"><i class="ti ti-eye"></i></button>` +
+          `<button class="node-act-btn" title="Extract" onclick="event.stopPropagation();extractNode(this.closest('.tree-node'))"><i class="ti ti-download"></i></button>`;
+      }
+    } else if (source==='project') {
+      acts.innerHTML = `<button class="node-act-btn" title="New file here" onclick="event.stopPropagation();newFileInFolder(this.closest('.tree-node'))"><i class="ti ti-file-plus"></i></button>`;
+    }
+    node.appendChild(acts);
+    parent.appendChild(node);
+
+    // folder expand/collapse
+    if (isFolder) {
+      const childWrap = document.createElement('div');
+      childWrap.className = 'tree-children';
+      parent.appendChild(childWrap);
+      renderTreeObj(children, childWrap, depth+1, source, projectId);
+
+      node.addEventListener('click', e => {
+        e.stopPropagation();
+        const open = node.classList.toggle('open');
+        childWrap.classList.toggle('visible', open);
+        selectNode(node);
+      });
+    } else {
+      node.addEventListener('click',    e => { e.stopPropagation(); selectNode(node); });
+      node.addEventListener('dblclick', () => openNodeFile(node));
+    }
+    node.addEventListener('contextmenu', e => { e.preventDefault(); showNodeCtx(e, node, isFolder); });
+  }
+}
+
+function fileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const m = {
+    gas:'<i class="ti ti-file-code" style="color:#cba6f7"></i>',
+    skrit:'<i class="ti ti-file-code" style="color:#89b4fa"></i>',
+    gs:'<i class="ti ti-file-code" style="color:#89b4fa"></i>',
+    template:'<i class="ti ti-file-code" style="color:#cba6f7"></i>',
+    lqd:'<i class="ti ti-file-3d" style="color:#94e2d5"></i>',
+    raw:'<i class="ti ti-photo" style="color:#89dceb"></i>',
+    tga:'<i class="ti ti-photo" style="color:#89dceb"></i>',
+    png:'<i class="ti ti-photo" style="color:#89dceb"></i>',
+    bmp:'<i class="ti ti-photo" style="color:#89dceb"></i>',
+    wav:'<i class="ti ti-music" style="color:#a6e3a1"></i>',
+    mp3:'<i class="ti ti-music" style="color:#a6e3a1"></i>',
+    ogg:'<i class="ti ti-music" style="color:#a6e3a1"></i>',
+    cfg:'<i class="ti ti-settings" style="color:#f9e2af"></i>',
+    ini:'<i class="ti ti-settings" style="color:#f9e2af"></i>',
+    txt:'<i class="ti ti-file-text" style="color:#cdd6f4"></i>',
+    ds2res:'<i class="ti ti-package" style="color:#fab387"></i>',
+    ds2map:'<i class="ti ti-map" style="color:#fab387"></i>',
+  };
+  return m[ext] || '<i class="ti ti-file" style="color:var(--file-c)"></i>';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NODE SELECTION & PATH BUILDING
+// ═══════════════════════════════════════════════════════════════
+function selectNode(el) {
+  document.querySelectorAll('.tree-node.selected').forEach(n=>n.classList.remove('selected'));
+  el.classList.add('selected');
+  if (el.dataset.source==='tank') {
+    exSelPath = buildRelPath(el);
+    document.getElementById('btn-extract-sel').disabled = false;
+  }
+}
+
+// Build the relative path from root by walking up the DOM
+function buildRelPath(el) {
+  const parts = [el.dataset.name];
+  let cur = el;
+  while (true) {
+    const pc = cur.parentElement;
+    if (!pc) break;
+    // If parent is a .tree-children div, its previousElementSibling is the folder node
+    if (pc.classList.contains('tree-children') || pc.classList.contains('proj-group-children')) {
+      const folder = pc.previousElementSibling;
+      if (folder && folder.classList.contains('tree-node') && folder.dataset.name) {
+        parts.unshift(folder.dataset.name);
+        cur = folder;
+        continue;
+      }
+    }
+    break;
+  }
+  return parts.join('\\');
+}
+
+function buildDiskPath(el) {
+  const rel = buildRelPath(el);
+  if (el.dataset.source === 'project') {
+    const proj = projects.find(p=>p.id===el.dataset.projId);
+    return proj ? proj.rootPath + '\\' + rel : rel;
+  }
+  return rel;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILE ACTIONS
+// ═══════════════════════════════════════════════════════════════
+function openNodeFile(el) {
+  const path   = buildDiskPath(el);
+  const source = el.dataset.source || 'tank';
+  const projId = el.dataset.projId || null;
+  const already = tabs.find(t=>t.path===path);
+  if (already) { activateTab(already.id); return; }
+  postMsg({ cmd:'openFile', path, source, projectId:projId });
+}
+
+function extractNode(el) {
+  selectNode(el);
+  exSelPath = buildRelPath(el);
+  postMsg({ cmd:'extractSelected', selectedPath: exSelPath });
+}
+
+function newFileInFolder(el) {
+  postMsg({ cmd:'newFile', folderPath: buildDiskPath(el), projectId: el.dataset.projId });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════
+function openTab(path, content, source, projectId) {
+  const id  = 'tab_' + Date.now();
+  const name= path.split(/[\\/]/).pop();
+  tabs.push({ id, name, path, content, savedContent:content, dirty:false, source, projectId });
+  rebuildTabBar();
+  activateTab(id);
+}
+
+function rebuildTabBar() {
+  const bar = document.getElementById('tab-bar');
+  bar.innerHTML = '';
+  for (const t of tabs) {
+    const el = document.createElement('div');
+    el.className = 'tab' + (t.id===activeTabId?' active':'');
+    el.dataset.tabId = t.id;
+    el.innerHTML =
+      `<span class="tab-icon">${tabIcon(t.name)}</span>` +
+      `<span class="tab-name">${h(t.name)}</span>` +
+      `<span class="tab-dirty${t.dirty?' show':''}"></span>` +
+      `<button class="tab-close" onclick="event.stopPropagation();closeTab('${t.id}')"><i class="ti ti-x"></i></button>`;
+    el.onclick = () => activateTab(t.id);
+    bar.appendChild(el);
+  }
+  const sp = document.createElement('div'); sp.className='tab-spacer'; bar.appendChild(sp);
+}
+
+function tabIcon(name) {
+  const ext=name.split('.').pop().toLowerCase();
+  return {gas:'🟣',skrit:'🔵',lqd:'🟦',raw:'🖼',tga:'🖼',png:'🖼',wav:'🎵',ogg:'🎵'}[ext]||'📄';
+}
+
+function syncTabEl(tab) { rebuildTabBar(); updateDirtyDots(); }
+
+function activateTab(id) {
+  activeTabId = id;
+  const tab = tabs.find(t=>t.id===id);
+  rebuildTabBar();
+  if (!tab) { showWelcome(); return; }
+  loadEditor(tab);
+}
+
+function closeTab(id) {
+  const t = tabs.find(x=>x.id===id);
+  if (t?.dirty && !confirm(`${t.name} has unsaved changes. Close anyway?`)) return;
+  tabs = tabs.filter(x=>x.id!==id);
+  if (activeTabId===id) activeTabId = tabs.length ? tabs[tabs.length-1].id : null;
+  rebuildTabBar();
+  activeTabId ? activateTab(activeTabId) : showWelcome();
+}
+
+function updateDirtyDots() {
+  document.querySelectorAll('.dirty-dot').forEach(dd => {
+    const name = dd.dataset.dirtyFor;
+    dd.classList.toggle('show', tabs.some(t=>t.name===name&&t.dirty));
+  });
+}
+
+function showWelcome() {
+  document.getElementById('welcome').style.display        = 'flex';
+  document.getElementById('editor-wrapper').classList.remove('active');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CODEMIRROR
+// ═══════════════════════════════════════════════════════════════
+function initEditor() {
+  editor = CodeMirror(document.getElementById('cm-wrapper'), {
+    value: '', theme: 'material-darker',
+    lineNumbers: true, matchBrackets: true, autoCloseBrackets: true,
+    styleActiveLine: true,
+    highlightSelectionMatches: { showToken:/\w/, annotateScrollbar:true },
+    foldGutter: true,
+    gutters: ['CodeMirror-linenumbers','CodeMirror-foldgutter'],
+    autoRefresh: true, tabSize: 4, indentWithTabs: false,
+    extraKeys: {
+      'Ctrl-S':         () => saveActiveFile(),
+      'Ctrl-Z':         cm => cm.undo(),
+      'Ctrl-Y':         cm => cm.redo(),
+      'Shift-Ctrl-Z':   cm => cm.redo(),
+      'Ctrl-F':         () => toggleFind(false),
+      'Ctrl-H':         () => toggleFind(true),
+      'Ctrl-W':         () => { if(activeTabId) closeTab(activeTabId); },
+      'Ctrl-Tab':       () => cycleTab(1),
+      'Shift-Ctrl-Tab': () => cycleTab(-1),
+      'Ctrl-/':         cm => cm.toggleComment(),
+      'Escape':         () => closeFind(),
+    }
+  });
+  editor.on('change', (cm) => {
+    if (suppressChange) return;
+    const t = tabs.find(t=>t.id===activeTabId); if(!t) return;
+    t.content = cm.getValue();
+    t.dirty   = t.content !== t.savedContent;
+    syncTabEl(t); updateUnsavedBar();
+  });
+  editor.on('cursorActivity', cm => {
+    const c = cm.getCursor();
+    document.getElementById('sb-line').textContent = c.line+1;
+    document.getElementById('sb-col').textContent  = c.ch+1;
+  });
+}
+
+function loadEditor(tab) {
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('editor-wrapper').classList.add('active');
+  if (!editor) initEditor();
+
+  suppressChange = true;
+  editor.setValue(tab.content || '');
+  editor.clearHistory();
+  suppressChange = false;
+
+  const ext = tab.name.split('.').pop().toLowerCase();
+  const modeMap = { gas:'gas', skrit:'gas', gs:'gas', template:'gas' };
+  editor.setOption('mode', modeMap[ext] || null);
+
+  const modeLabel = { gas:'DS2 GAS', skrit:'DS2 Skrit', gs:'DS2 GAS', template:'DS2 Template', ini:'INI', cfg:'Config', txt:'Plain Text', xml:'XML', json:'JSON' };
+  document.getElementById('sb-mode').textContent = modeLabel[ext] || ext.toUpperCase() || 'Plain Text';
+
+  // Breadcrumb
+  const parts = tab.path.split(/[\\/]/);
+  document.getElementById('breadcrumb').innerHTML =
+    parts.map((p,i)=>
+      i<parts.length-1
+        ? `<span>${h(p)}</span><span class="bc-sep"> › </span>`
+        : `<span class="bc-last">${h(p)}</span>`
+    ).join('');
+
+  document.getElementById('sb-size').textContent = fmtBytes(new Blob([tab.content]).size);
+  updateUnsavedBar();
+  setTimeout(()=>editor.refresh(), 30);
+  editor.focus();
+}
+
+function cycleTab(dir) {
+  if (!tabs.length) return;
+  const i = tabs.findIndex(t=>t.id===activeTabId);
+  activateTab(tabs[(i+dir+tabs.length)%tabs.length].id);
+}
+
+function editorCmd(cmd) {
+  if (!editor) return;
+  if (cmd==='undo') editor.undo();
+  if (cmd==='redo') editor.redo();
+  editor.focus();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE / REVERT
+// ═══════════════════════════════════════════════════════════════
+function saveActiveFile() {
+  const t = tabs.find(t=>t.id===activeTabId); if(!t) return;
+  if (t.source==='tank') { showToast('warning','Read-only','Extract the tank first to edit files.'); return; }
+  postMsg({ cmd:'saveFile', path:t.path, content: editor?.getValue()||t.content });
+}
+function revertActiveFile() {
+  const t = tabs.find(t=>t.id===activeTabId); if(!t||!t.dirty) return;
+  suppressChange = true;
+  editor.setValue(t.savedContent);
+  suppressChange = false;
+  t.content = t.savedContent; t.dirty = false;
+  syncTabEl(t); updateUnsavedBar();
+}
+function updateUnsavedBar() {
+  const t = tabs.find(t=>t.id===activeTabId);
+  document.getElementById('unsaved-bar').classList.toggle('show', !!t?.dirty);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FIND / REPLACE
+// ═══════════════════════════════════════════════════════════════
+function toggleFind(withReplace) {
+  const bar = document.getElementById('find-bar');
+  const open = bar.style.display !== 'none' && bar.style.display !== '';
+  if (open && !withReplace) { closeFind(); return; }
+  bar.style.display = 'flex';
+  const show = d => d.style.display = withReplace ? '' : 'none';
+  show(document.getElementById('rep-sep'));
+  show(document.getElementById('replace-input'));
+  show(document.getElementById('btn-rep-one'));
+  show(document.getElementById('btn-rep-all'));
+  const sel = editor?.getSelection();
+  if (sel) document.getElementById('find-input').value = sel;
+  document.getElementById('find-input').focus();
+  document.getElementById('find-input').select();
+  doFind();
+}
+function closeFind() {
+  document.getElementById('find-bar').style.display = 'none';
+  document.getElementById('find-count').textContent = '';
+  editor?.focus();
+}
+function doFind() {
+  if (!editor) return;
+  const q = document.getElementById('find-input').value;
+  if (!q) { document.getElementById('find-count').textContent=''; return; }
+  let n=0; const c=editor.getSearchCursor(q,{line:0,ch:0},false);
+  while(c.findNext()) n++;
+  document.getElementById('find-count').textContent = n ? `${n} match${n!==1?'es':''}` : 'no matches';
+}
+function findNext() {
+  if (!editor) return;
+  const q = document.getElementById('find-input').value; if(!q) return;
+  if (!findCur||findCur._q!==q) { findCur=editor.getSearchCursor(q,editor.getCursor()); findCur._q=q; }
+  if (!findCur.findNext()) { findCur=editor.getSearchCursor(q,{line:0,ch:0}); findCur._q=q; findCur.findNext(); }
+  if (findCur.from()) editor.setSelection(findCur.from(), findCur.to());
+}
+function findPrev() {
+  if (!editor) return;
+  const q = document.getElementById('find-input').value; if(!q) return;
+  const c = editor.getSearchCursor(q, editor.getCursor());
+  if (!c.findPrevious()) {
+    const c2 = editor.getSearchCursor(q, {line:editor.lastLine()+1,ch:0});
+    while(c2.findPrevious()){} if(c2.from()) editor.setSelection(c2.from(),c2.to()); return;
+  }
+  editor.setSelection(c.from(), c.to());
+}
+function replaceOne() { if(!editor||!findCur) return; findCur.replace(document.getElementById('replace-input').value); findNext(); }
+function replaceAll() {
+  if(!editor) return;
+  const q=document.getElementById('find-input').value, r=document.getElementById('replace-input').value;
+  if(!q) return;
+  let n=0;
+  editor.operation(()=>{ const c=editor.getSearchCursor(q); while(c.findNext()){c.replace(r);n++;}});
+  showToast('success','Replaced',`${n} replacement${n!==1?'s':''}.`);
+}
+function findKeydown(e) { if(e.key==='Enter'){e.shiftKey?findPrev():findNext();} if(e.key==='Escape') closeFind(); e.stopPropagation(); }
+function repKeydown(e)  { if(e.key==='Enter') replaceOne(); if(e.key==='Escape') closeFind(); e.stopPropagation(); }
+
+// ═══════════════════════════════════════════════════════════════
+// EXTRACT SELECTED (tank explorer)
+// ═══════════════════════════════════════════════════════════════
+function postExtractSelected() {
+  if (!exSelPath) { showToast('warning','Nothing Selected','Select a file or folder first.'); return; }
+  postMsg({ cmd:'extractSelected', selectedPath: exSelPath });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TREE CONTROLS
+// ═══════════════════════════════════════════════════════════════
+function expandAll(scope) {
+  const root = scope ? document.querySelector(scope) : document;
+  root.querySelectorAll('.tree-node.folder').forEach(n=>n.classList.add('open'));
+  root.querySelectorAll('.tree-children,.proj-group-children').forEach(n=>n.classList.add('visible'));
+}
+function collapseAll(scope) {
+  const root = scope ? document.querySelector(scope) : document;
+  root.querySelectorAll('.tree-node.folder').forEach(n=>n.classList.remove('open'));
+  root.querySelectorAll('.tree-children,.proj-group-children').forEach(n=>n.classList.remove('visible'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROJECTS
+// ═══════════════════════════════════════════════════════════════
+function packActiveProject() {
+  if (!projects.length) { showToast('warning','No Project','Add a project folder first.'); return; }
+  openRtcModal(projects[0].rootPath);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTEXT MENU
+// ═══════════════════════════════════════════════════════════════
+function showNodeCtx(e, el, isFolder) {
+  const isProj = el.dataset.source === 'project';
+  ctxTarget = { el, path:buildDiskPath(el), relPath:buildRelPath(el), source:el.dataset.source, projId:el.dataset.projId, isFolder, isProjectRoot:false };
+  document.getElementById('ctx-open').style.display        = !isFolder ? '' : 'none';
+  document.getElementById('ctx-extract').style.display     = !isProj   ? '' : 'none';
+  document.getElementById('ctx-pack-proj').style.display   = 'none';
+  document.getElementById('ctx-remove-proj').style.display = 'none';
+  document.getElementById('ctx-sep-del').style.display     = (isProj&&!isFolder) ? '' : 'none';
+  document.getElementById('ctx-delete').style.display      = (isProj&&!isFolder) ? '' : 'none';
+  showCtxAt(e.clientX, e.clientY);
+}
+function showCtxAt(x,y) {
+  const m = document.getElementById('ctx-menu');
+  m.style.left = x+'px'; m.style.top = y+'px';
+  m.classList.add('open');
+}
+function hideCtx() { document.getElementById('ctx-menu').classList.remove('open'); }
+document.addEventListener('click', hideCtx);
+
+function ctxOpenFile()      { hideCtx(); if(ctxTarget?.el) openNodeFile(ctxTarget.el); }
+function ctxExtract()       { hideCtx(); if(ctxTarget?.relPath){ exSelPath=ctxTarget.relPath; postExtractSelected(); } }
+function ctxReveal()        { hideCtx(); postMsg({cmd:'revealInExplorer', path:ctxTarget?.path||''}); }
+function ctxCopyPath()      { hideCtx(); navigator.clipboard.writeText(ctxTarget?.path||'').then(()=>showToast('info','Copied','Path copied.')); }
+function ctxDelete()        { hideCtx(); const t=ctxTarget; if(!t?.path)return; if(confirm(`Delete ${t.path.split(/[\\/]/).pop()}? This cannot be undone.`)) postMsg({cmd:'deleteFile',path:t.path,projectId:t.projId}); }
+function ctxPackProject()   { hideCtx(); const proj=projects.find(p=>p.id===ctxTarget?.projId); if(proj) openRtcModal(proj.rootPath); }
+function ctxRemoveProject() { hideCtx(); const id=ctxTarget?.projId; if(id&&confirm('Remove project from list? Files on disk are not deleted.')) postMsg({cmd:'removeProject',projectId:id}); }
+
+// ═══════════════════════════════════════════════════════════════
+// GLOBAL SEARCH
+// ═══════════════════════════════════════════════════════════════
+function globalSearch(q) {
+  const cont = document.getElementById('search-results');
+  if (!q.trim()) { cont.innerHTML='<div class="tree-empty" style="font-size:11px;padding:16px 14px;">Type to search across open files.</div>'; return; }
+  const results=[];
+  for (const tab of tabs) {
+    if (!tab.content) continue;
+    tab.content.split('\n').forEach((line,i)=>{
+      if (line.toLowerCase().includes(q.toLowerCase()))
+        results.push({file:tab.name, tabId:tab.id, line:i+1, text:line.trim()});
+    });
+  }
+  if (!results.length) { cont.innerHTML=`<div class="tree-empty" style="font-size:11px;padding:16px 14px;">No matches in open files.</div>`; return; }
+  cont.innerHTML = results.slice(0,200).map(r=>
+    `<div class="gs-result" onclick="activateTab('${r.tabId}');setTimeout(()=>goToLine(${r.line}),80)">
+      <div class="gs-fname">${h(r.file)} <span style="color:var(--muted)">:${r.line}</span></div>
+      <div class="gs-line">${h(r.text)}</div>
+    </div>`
+  ).join('');
+}
+function goToLine(n) { if(!editor)return; editor.setCursor({line:n-1,ch:0}); editor.scrollIntoView({line:n-1,ch:0},80); }
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+const TOAST_ICON = { success:'ti-circle-check', error:'ti-alert-circle', info:'ti-info-circle', warning:'ti-alert-triangle' };
+function showToast(type, title, msg) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML =
+    `<i class="ti ${TOAST_ICON[type]||'ti-info-circle'} ti-icon"></i>` +
+    `<div class="toast-body"><div class="toast-title">${h(title)}</div><div class="toast-msg">${h(msg)}</div></div>` +
+    `<button class="toast-close" onclick="this.closest('.toast').remove()"><i class="ti ti-x"></i></button>`;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(), 5000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RTC MODAL
+// ═══════════════════════════════════════════════════════════════
+function openRtcModal(prefill) {
+  document.getElementById('active-modal').innerHTML = `
     <div class="modal-header">
       <span class="modal-title"><i class="ti ti-archive" style="margin-right:6px"></i>Pack New Tank via RTC</span>
       <button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
-
-    <div class="form-row">
-      <label>Source Directory *</label>
-      <div class="input-group">
-        <input type="text" id="f-source" placeholder="C:\path\to\source\folder">
-        <button class="browse-btn" onclick="browseSource()"><i class="ti ti-folder"></i> Browse</button>
-      </div>
-    </div>
-    <div class="form-row">
-      <label>Output File *</label>
-      <div class="input-group">
+    <div class="form-row"><label>Source Directory *</label>
+      <div class="ig">
+        <input type="text" id="f-source" value="${h(prefill||'')}" placeholder="C:\\path\\to\\source">
+        <button class="browse-btn" onclick="postMsg({cmd:'browseSourceDir'})"><i class="ti ti-folder"></i> Browse</button>
+      </div></div>
+    <div class="form-row"><label>Output File *</label>
+      <div class="ig">
         <input type="text" id="f-out" placeholder="output.ds2res">
-        <button class="browse-btn" onclick="browseOut()"><i class="ti ti-file"></i> Browse</button>
-      </div>
-    </div>
-
-    <div class="form-divider"></div>
-
-    <div class="form-row">
-      <label>Title</label>
-      <input type="text" id="f-title" placeholder="My Mod">
-    </div>
-    <div class="form-row">
-      <label>Author</label>
-      <input type="text" id="f-author" placeholder="Author name">
-    </div>
-    <div class="form-row">
-      <label>Copyright</label>
-      <input type="text" id="f-copyright" placeholder="© 2024">
-    </div>
-    <div class="form-row">
-      <label>Build</label>
-      <input type="text" id="f-build" placeholder="1.0.0">
-    </div>
-    <div class="form-row">
-      <label>Priority (hex or decimal)</label>
-      <input type="text" id="f-priority" value="0x4000" placeholder="0x4000">
-    </div>
-
-    <div class="form-divider"></div>
-
-    <label class="checkbox-row">
-      <input type="checkbox" id="chk-dev">
-      <span class="cb-label">-flagdev</span>
-      <span class="cb-desc">Development build only</span>
-    </label>
-    <label class="checkbox-row">
-      <input type="checkbox" id="chk-mpxfer">
-      <span class="cb-label">-flagmpxfer</span>
-      <span class="cb-desc">Allow multiplayer transfer</span>
-    </label>
-    <label class="checkbox-row">
-      <input type="checkbox" id="chk-protected">
-      <span class="cb-label">-flagprotected</span>
-      <span class="cb-desc">Protected content</span>
-    </label>
-    <label class="checkbox-row">
-      <input type="checkbox" id="chk-wait">
-      <span class="cb-label">-waitonexit</span>
-      <span class="cb-desc">Pause RTC on exit</span>
-    </label>
-
+        <button class="browse-btn" onclick="postMsg({cmd:'browseOutFile'})"><i class="ti ti-file"></i> Browse</button>
+      </div></div>
+    <hr class="form-div">
+    <div class="form-row"><label>Title</label>    <input type="text" id="f-title"></div>
+    <div class="form-row"><label>Author</label>   <input type="text" id="f-author"></div>
+    <div class="form-row"><label>Copyright</label><input type="text" id="f-copyright"></div>
+    <div class="form-row"><label>Build</label>    <input type="text" id="f-build"></div>
+    <div class="form-row"><label>Priority</label> <input type="text" id="f-priority" value="0x4000"></div>
+    <hr class="form-div">
+    <label class="cb-row"><input type="checkbox" id="chk-dev"><span class="cb-l">-flagdev</span><span class="cb-d">Dev only</span></label>
+    <label class="cb-row"><input type="checkbox" id="chk-mpxfer"><span class="cb-l">-flagmpxfer</span><span class="cb-d">Multiplayer</span></label>
+    <label class="cb-row"><input type="checkbox" id="chk-protected"><span class="cb-l">-flagprotected</span><span class="cb-d">Protected</span></label>
+    <label class="cb-row"><input type="checkbox" id="chk-wait"><span class="cb-l">-waitonexit</span><span class="cb-d">Pause on exit</span></label>
     <div class="progress-wrap" id="progress-wrap">
       <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
       <div class="progress-label" id="progress-label">Running RTC.exe…</div>
     </div>
-
     <div class="modal-actions">
       <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
       <button class="modal-btn confirm" id="btn-create-tank" onclick="submitRtc()">
         <i class="ti ti-archive" style="margin-right:4px"></i>Create Tank
       </button>
-    </div>
-  </div>
-</div>
-
-<script>
-// ─────────────────────────────────────────────────────────────
-// State
-// ─────────────────────────────────────────────────────────────
-let allNodes = [];   // flat list of {el, path, depth, isFolder}
-let selectedNode = null;
-let ctxTarget = null;
-
-// ─────────────────────────────────────────────────────────────
-// C# Bridge — called FROM C#
-// ─────────────────────────────────────────────────────────────
-window.ds2 = {
-  populateTree(fileList, fileCount) {
-    buildTree(fileList);
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('tree-container').style.display = 'block';
-    document.getElementById('stats').style.display = 'flex';
-    document.getElementById('title-filename').textContent = fileList[0]?.split('\\')[0] ?? 'Unknown Tank';
-    document.getElementById('btn-extract-all').disabled = false;
-    document.getElementById('btn-extract-sel').disabled = false;
-    document.getElementById('tb-collapse').disabled = false;
-    document.getElementById('tb-expand').disabled = false;
-    updateStats();
-    showToast('success', 'Tank Loaded', `${fileCount} files loaded successfully.`);
-  },
-  setFileName(name) {
-    document.getElementById('title-filename').textContent = name;
-  },
-  showToast(type, title, msg) {
-    showToast(type, title, msg);
-  },
-  setProgress(pct, label) {
-    const wrap = document.getElementById('progress-wrap');
-    wrap.style.display = 'block';
-    document.getElementById('progress-fill').style.width = pct + '%';
-    document.getElementById('progress-label').textContent = label;
-    if (pct >= 100) {
-      setTimeout(() => { wrap.style.display = 'none'; }, 1200);
-    }
-  },
-  onRtcSuccess(msg) {
-    closeModal();
-    showToast('success', 'Tank Created', msg);
-  },
-  onRtcError(msg) {
-    document.getElementById('btn-create-tank').disabled = false;
-    document.getElementById('btn-create-tank').textContent = 'Retry';
-    showToast('error', 'RTC Failed', msg);
-  },
-  setBrowsedSource(path) {
-    document.getElementById('f-source').value = path;
-  },
-  setBrowsedOut(path) {
-    document.getElementById('f-out').value = path;
-  }
-};
-
-// ─────────────────────────────────────────────────────────────
-// Tree Building
-// ─────────────────────────────────────────────────────────────
-function buildTree(paths) {
-  const container = document.getElementById('tree-container');
-  container.innerHTML = '';
-  allNodes = [];
-
-  const root = {};
-  for (const p of paths) {
-    const parts = p.replace(/^\\/,'').split('\\');
-    let cur = root;
-    for (const part of parts) {
-      if (!cur[part]) cur[part] = {};
-      cur = cur[part];
-    }
-  }
-
-  function render(obj, parent, depth) {
-    const keys = Object.keys(obj).sort((a,b) => {
-      const aIsFolder = Object.keys(obj[a]).length > 0;
-      const bIsFolder = Object.keys(obj[b]).length > 0;
-      if (aIsFolder && !bIsFolder) return -1;
-      if (!aIsFolder && bIsFolder) return 1;
-      return a.localeCompare(b);
-    });
-    for (const key of keys) {
-      const children = obj[key];
-      const isFolder = Object.keys(children).length > 0;
-      const nodeEl = document.createElement('div');
-      nodeEl.className = 'tree-node ' + (isFolder ? 'folder' : 'file');
-      nodeEl.style.paddingLeft = (8 + depth * 16) + 'px';
-      nodeEl.dataset.name = key;
-      nodeEl.dataset.depth = depth;
-
-      const toggle = document.createElement('span');
-      toggle.className = 'toggle';
-      toggle.innerHTML = isFolder ? '<i class="ti ti-chevron-right"></i>' : '';
-      nodeEl.appendChild(toggle);
-
-      const icon = document.createElement('span');
-      icon.className = 'node-icon';
-      icon.innerHTML = isFolder
-        ? '<i class="ti ti-folder"></i>'
-        : getFileIcon(key);
-      nodeEl.appendChild(icon);
-
-      const label = document.createElement('span');
-      label.className = 'label';
-      if (!isFolder) {
-        const dot = key.lastIndexOf('.');
-        if (dot > 0) {
-          label.innerHTML = escHtml(key.substring(0, dot)) +
-            '<span class="ext">' + escHtml(key.substring(dot)) + '</span>';
-        } else {
-          label.textContent = key;
-        }
-      } else {
-        label.textContent = key;
-      }
-      nodeEl.appendChild(label);
-
-      parent.appendChild(nodeEl);
-      allNodes.push({ el: nodeEl, name: key, isFolder, depth });
-
-      if (isFolder) {
-        const childContainer = document.createElement('div');
-        childContainer.className = 'tree-children';
-        parent.appendChild(childContainer);
-        render(children, childContainer, depth + 1);
-
-        nodeEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const open = nodeEl.classList.toggle('open');
-          childContainer.classList.toggle('visible', open);
-          selectNode(nodeEl);
-          updateStats();
-        });
-      } else {
-        nodeEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectNode(nodeEl);
-        });
-        nodeEl.addEventListener('dblclick', () => {
-          window.chrome.webview.postMessage({cmd:'previewFile', path: getNodePath(nodeEl)});
-        });
-      }
-
-      nodeEl.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        ctxTarget = nodeEl;
-        selectNode(nodeEl);
-        showCtxMenu(e.clientX, e.clientY);
-      });
-    }
-  }
-
-  render(root, container, 0);
-  updateStats();
-}
-
-function getFileIcon(name) {
-  const ext = name.split('.').pop().toLowerCase();
-  const map = {
-    gas: '<i class="ti ti-file-code"></i>',
-    lqd: '<i class="ti ti-file-3d"></i>',
-    skrit: '<i class="ti ti-file-code"></i>',
-    raw: '<i class="ti ti-photo"></i>',
-    tga: '<i class="ti ti-photo"></i>',
-    png: '<i class="ti ti-photo"></i>',
-    bmp: '<i class="ti ti-photo"></i>',
-    wav: '<i class="ti ti-music"></i>',
-    mp3: '<i class="ti ti-music"></i>',
-    ogg: '<i class="ti ti-music"></i>',
-    cfg: '<i class="ti ti-settings"></i>',
-    ini: '<i class="ti ti-settings"></i>',
-  };
-  return map[ext] || '<i class="ti ti-file"></i>';
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-// ─────────────────────────────────────────────────────────────
-// Selection
-// ─────────────────────────────────────────────────────────────
-function selectNode(el) {
-  if (selectedNode) selectedNode.classList.remove('selected');
-  selectedNode = el;
-  el.classList.add('selected');
-  document.getElementById('tb-extract-sel').disabled = false;
-  document.getElementById('btn-extract-sel').disabled = false;
-}
-
-function getNodePath(el) {
-  const parts = [el.dataset.name];
-  let sib = el.previousElementSibling;
-  while (sib) {
-    if (sib.classList.contains('tree-node')) {
-      const d = parseInt(sib.dataset.depth);
-      if (d < parseInt(el.dataset.depth)) {
-        parts.unshift(sib.dataset.name);
-        el = sib;
-      }
-    }
-    sib = sib.previousElementSibling;
-  }
-  return parts.join('\\');
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tree Controls
-// ─────────────────────────────────────────────────────────────
-function expandAll() {
-  document.querySelectorAll('.tree-node.folder').forEach(n => n.classList.add('open'));
-  document.querySelectorAll('.tree-children').forEach(n => n.classList.add('visible'));
-  updateStats();
-}
-function collapseAll() {
-  document.querySelectorAll('.tree-node.folder').forEach(n => n.classList.remove('open'));
-  document.querySelectorAll('.tree-children').forEach(n => n.classList.remove('visible'));
-  updateStats();
-}
-
-// ─────────────────────────────────────────────────────────────
-// Stats
-// ─────────────────────────────────────────────────────────────
-function updateStats() {
-  const files   = document.querySelectorAll('.tree-node.file:not([style*="display: none"])').length;
-  const folders = document.querySelectorAll('.tree-node.folder:not([style*="display: none"])').length;
-  document.getElementById('stat-files').textContent = files;
-  document.getElementById('stat-folders').textContent = folders;
-  document.getElementById('stat-showing').textContent = files + folders;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Search / Filter
-// ─────────────────────────────────────────────────────────────
-function filterTree(q) {
-  q = q.toLowerCase().trim();
-  if (!q) {
-    allNodes.forEach(n => n.el.style.display = '');
-    document.querySelectorAll('.tree-children').forEach(c => {
-      c.classList.remove('visible');
-    });
-    document.querySelectorAll('.tree-node.folder').forEach(n => n.classList.remove('open'));
-    updateStats();
-    return;
-  }
-  // Show matched files + their parent folders
-  const matchedParents = new Set();
-  allNodes.forEach(n => {
-    if (!n.isFolder && n.name.toLowerCase().includes(q)) {
-      n.el.style.display = '';
-      // mark parent containers to show
-      let p = n.el.closest('.tree-children');
-      while (p) {
-        p.classList.add('visible');
-        const sibling = p.previousElementSibling;
-        if (sibling && sibling.classList.contains('tree-node')) {
-          sibling.style.display = '';
-          sibling.classList.add('open');
-          matchedParents.add(sibling);
-        }
-        p = p.parentElement.closest('.tree-children');
-      }
-    } else if (!n.isFolder) {
-      n.el.style.display = 'none';
-    }
-  });
-  // Hide empty folders
-  allNodes.forEach(n => {
-    if (n.isFolder && !matchedParents.has(n.el)) {
-      n.el.style.display = 'none';
-    }
-  });
-  updateStats();
-}
-
-// ─────────────────────────────────────────────────────────────
-// Extract Selected — build the full path from the selected node
-// then send it to C# so it can filter fileTable by prefix.
-// ─────────────────────────────────────────────────────────────
-function getSelectedPath() {
-  if (!selectedNode) return null;
-  // Walk up through the DOM: each tree-node's parent container is a
-  // .tree-children div whose previous sibling is the parent folder node.
-  const parts = [selectedNode.dataset.name];
-  let el = selectedNode;
-  while (true) {
-    const parentChildren = el.parentElement; // .tree-children or #tree-container
-    if (!parentChildren || parentChildren.id === 'tree-container') break;
-    const parentNode = parentChildren.previousElementSibling; // the folder .tree-node
-    if (!parentNode || !parentNode.classList.contains('tree-node')) break;
-    parts.unshift(parentNode.dataset.name);
-    el = parentNode;
-  }
-  return parts.join('\\');
-}
-
-function postExtractSelected() {
-  const path = getSelectedPath();
-  if (!path) { showToast('warning', 'Nothing selected', 'Click a file or folder in the tree first.'); return; }
-  window.chrome.webview.postMessage({ cmd: 'extractSelected', selectedPath: path });
-}
-
-
-const ctxMenu = document.getElementById('ctx-menu');
-function showCtxMenu(x, y) {
-  ctxMenu.style.left = x + 'px';
-  ctxMenu.style.top  = y + 'px';
-  ctxMenu.classList.add('open');
-}
-function hideCtxMenu() { ctxMenu.classList.remove('open'); }
-document.addEventListener('click', hideCtxMenu);
-document.addEventListener('contextmenu', e => { if (!ctxMenu.contains(e.target)) hideCtxMenu(); });
-
-function ctxExtract() {
-  hideCtxMenu();
-  postExtractSelected();
-}
-function ctxExtractHere() {
-  hideCtxMenu();
-  postExtractSelected();
-}
-function ctxCopyPath() {
-  hideCtxMenu();
-  if (ctxTarget) {
-    const p = ctxTarget.dataset.name;
-    navigator.clipboard.writeText(p).then(() => showToast('info','Copied','Path copied to clipboard.'));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Toast Notifications
-// ─────────────────────────────────────────────────────────────
-const iconMap = { success:'ti-circle-check', error:'ti-alert-circle', info:'ti-info-circle', warning:'ti-alert-triangle' };
-function showToast(type, title, msg) {
-  const container = document.getElementById('toast-container');
-  const t = document.createElement('div');
-  t.className = `toast ${type}`;
-  t.innerHTML = `
-    <i class="ti ${iconMap[type]||'ti-info-circle'} t-icon"></i>
-    <div class="t-body">
-      <div class="t-title">${escHtml(title)}</div>
-      <div class="t-msg">${escHtml(msg)}</div>
-    </div>
-    <span class="t-close" onclick="this.closest('.toast').remove()"><i class="ti ti-x"></i></span>`;
-  container.appendChild(t);
-  setTimeout(() => t.remove(), 5000);
-}
-
-// ─────────────────────────────────────────────────────────────
-// RTC Modal
-// ─────────────────────────────────────────────────────────────
-function openRtcModal() {
+    </div>`;
   document.getElementById('modal-backdrop').classList.add('open');
 }
-function closeModal() {
-  document.getElementById('modal-backdrop').classList.remove('open');
-  document.getElementById('progress-wrap').style.display = 'none';
-  document.getElementById('progress-fill').style.width = '0%';
-  const btn = document.getElementById('btn-create-tank');
-  btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-archive" style="margin-right:4px"></i>Create Tank';
-}
-document.getElementById('modal-backdrop').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
-});
-
-function browseSource() {
-  window.chrome.webview.postMessage({cmd:'browseSourceDir'});
-}
-function browseOut() {
-  window.chrome.webview.postMessage({cmd:'browseOutFile'});
-}
+function closeModal() { document.getElementById('modal-backdrop').classList.remove('open'); }
+document.getElementById('modal-backdrop').addEventListener('click', e => { if(e.target===document.getElementById('modal-backdrop')) closeModal(); });
 
 function submitRtc() {
-  const source = document.getElementById('f-source').value.trim();
-  const out    = document.getElementById('f-out').value.trim();
+  const source = document.getElementById('f-source')?.value.trim();
+  const out    = document.getElementById('f-out')?.value.trim();
   if (!source) { showToast('error','Validation','Source directory is required.'); return; }
-  if (!out)    { showToast('error','Validation','Output file path is required.'); return; }
-
+  if (!out)    { showToast('error','Validation','Output file is required.'); return; }
   const btn = document.getElementById('btn-create-tank');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader-2" style="margin-right:4px"></i>Packing…';
-
-  document.getElementById('progress-wrap').style.display = 'block';
-  document.getElementById('progress-fill').style.width = '20%';
-  document.getElementById('progress-label').textContent = 'Starting RTC.exe…';
-
-  window.chrome.webview.postMessage({
-    cmd:       'createTankRtc',
-    source:    source,
-    out:       out,
-    title:     document.getElementById('f-title').value.trim(),
-    author:    document.getElementById('f-author').value.trim(),
-    copyright: document.getElementById('f-copyright').value.trim(),
-    build:     document.getElementById('f-build').value.trim(),
-    priority:  document.getElementById('f-priority').value.trim(),
-    flagDev:       document.getElementById('chk-dev').checked,
-    flagMpXfer:    document.getElementById('chk-mpxfer').checked,
-    flagProtected: document.getElementById('chk-protected').checked,
-    flagWait:      document.getElementById('chk-wait').checked,
+  btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2" style="margin-right:4px"></i>Packing…';
+  const pw=document.getElementById('progress-wrap');
+  if(pw){pw.style.display='block';document.getElementById('progress-fill').style.width='20%';document.getElementById('progress-label').textContent='Starting RTC.exe…';}
+  postMsg({
+    cmd:'createTankRtc',
+    source, out,
+    title:     document.getElementById('f-title')?.value.trim()||'',
+    author:    document.getElementById('f-author')?.value.trim()||'',
+    copyright: document.getElementById('f-copyright')?.value.trim()||'',
+    build:     document.getElementById('f-build')?.value.trim()||'',
+    priority:  document.getElementById('f-priority')?.value.trim()||'0x4000',
+    flagDev:       document.getElementById('chk-dev')?.checked||false,
+    flagMpXfer:    document.getElementById('chk-mpxfer')?.checked||false,
+    flagProtected: document.getElementById('chk-protected')?.checked||false,
+    flagWait:      document.getElementById('chk-wait')?.checked||false,
   });
 }
 </script>
