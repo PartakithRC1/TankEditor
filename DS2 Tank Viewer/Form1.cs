@@ -61,20 +61,42 @@ namespace DS2_Tank_Viewer
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = true; // flip false for release
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            try
+            {
+                webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                "ds2app.local",
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources"),
+                CoreWebView2HostResourceAccessKind.Allow
+            );
+            }
+            catch { }
 
-            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ds2_tank_editor.html");
+
+            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory + "Resources\\", "ds2_tank_editor.html");
             if (File.Exists(htmlPath))
-                webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                //webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                webView.CoreWebView2.Navigate("https://ds2app.local/ds2_tank_editor.html");
             else
                 webView.CoreWebView2.NavigateToString(GetEmbeddedHtml());
+            //GetEmbeddedHtml2();
 
             webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
         }
 
         private string GetEmbeddedHtml()
         {
+            //MessageBox.Show("Failed to load local html, loading embedded backup (DS2 UI Scaler tool will not work with the backup.)");
             using var stream = Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("DS2_Tank_Viewer.Resources.ds2_tank_editor.html");
+            if (stream == null) return "<h1>HTML resource missing</h1>";
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+
+        private string GetEmbeddedHtml2()
+        {
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("DS2_Tank_Viewer.Resources.ds2_gas_scaler.html");
             if (stream == null) return "<h1>HTML resource missing</h1>";
             using var reader = new StreamReader(stream);
             return reader.ReadToEnd();
@@ -647,11 +669,82 @@ namespace DS2_Tank_Viewer
 
         private void InitializeComponent()
         {
-            this.Text = "DS2 Tank Editor";
-            this.Size = new System.Drawing.Size(1200, 720);
-            this.MinimumSize = new System.Drawing.Size(800, 500);
-            this.BackColor = System.Drawing.Color.FromArgb(15, 17, 23);
-            this.StartPosition = FormStartPosition.CenterScreen;
+            menuStrip1 = new MenuStrip();
+            toolsToolStripMenuItem = new ToolStripMenuItem();
+            editorToolStripMenuItem = new ToolStripMenuItem();
+            gasRectResizerToolStripMenuItem = new ToolStripMenuItem();
+            menuStrip1.SuspendLayout();
+            SuspendLayout();
+            // 
+            // menuStrip1
+            // 
+            menuStrip1.Items.AddRange(new ToolStripItem[] { toolsToolStripMenuItem });
+            menuStrip1.Location = new Point(0, 0);
+            menuStrip1.Name = "menuStrip1";
+            menuStrip1.Size = new Size(1184, 24);
+            menuStrip1.TabIndex = 0;
+            menuStrip1.Text = "menuStrip1";
+            // 
+            // toolsToolStripMenuItem
+            // 
+            toolsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { editorToolStripMenuItem, gasRectResizerToolStripMenuItem });
+            toolsToolStripMenuItem.Name = "toolsToolStripMenuItem";
+            toolsToolStripMenuItem.Size = new Size(47, 20);
+            toolsToolStripMenuItem.Text = "Tools";
+            // 
+            // editorToolStripMenuItem
+            // 
+            editorToolStripMenuItem.Name = "editorToolStripMenuItem";
+            editorToolStripMenuItem.Size = new Size(180, 22);
+            editorToolStripMenuItem.Text = "Editor";
+            editorToolStripMenuItem.Click += editorToolStripMenuItem_Click;
+            // 
+            // gasRectResizerToolStripMenuItem
+            // 
+            gasRectResizerToolStripMenuItem.Name = "gasRectResizerToolStripMenuItem";
+            gasRectResizerToolStripMenuItem.Size = new Size(180, 22);
+            gasRectResizerToolStripMenuItem.Text = "Gas Rect Resizer";
+            gasRectResizerToolStripMenuItem.Click += gasRectResizerToolStripMenuItem_Click;
+            // 
+            // DS2TankEditor
+            // 
+            BackColor = Color.FromArgb(15, 17, 23);
+            ClientSize = new Size(1184, 681);
+            Controls.Add(menuStrip1);
+            MainMenuStrip = menuStrip1;
+            MinimumSize = new Size(800, 500);
+            Name = "DS2TankEditor";
+            StartPosition = FormStartPosition.CenterScreen;
+            Text = "DS2 Tank Editor";
+            menuStrip1.ResumeLayout(false);
+            menuStrip1.PerformLayout();
+            ResumeLayout(false);
+            PerformLayout();
+        }
+
+        private MenuStrip menuStrip1;
+        private ToolStripMenuItem toolsToolStripMenuItem;
+        private ToolStripMenuItem editorToolStripMenuItem;
+        private ToolStripMenuItem gasRectResizerToolStripMenuItem;
+
+        private void editorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory + "Resources\\", "ds2_tank_editor.html");
+            if (File.Exists(htmlPath))
+                //webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                webView.CoreWebView2.Navigate("https://ds2app.local/ds2_tank_editor.html");
+            else
+                webView.CoreWebView2.NavigateToString(GetEmbeddedHtml());
+        }
+
+        private void gasRectResizerToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory + "Resources\\", "ds2_gas_scaler.html");
+            if (File.Exists(htmlPath))
+                //webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                webView.CoreWebView2.Navigate("https://ds2app.local/ds2_gas_scaler.html");
+            else
+                webView.CoreWebView2.NavigateToString(GetEmbeddedHtml2());
         }
     }
 }

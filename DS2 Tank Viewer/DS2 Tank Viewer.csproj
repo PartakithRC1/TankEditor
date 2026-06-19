@@ -11,6 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Resources\ds2-gas-scaler.html" />
+    <None Remove="Resources\ds2_gas_scaler.html" />
     <None Remove="Resources\ds2_tank_editor.html" />
     <None Remove="Resources\RTC.exe" />
   </ItemGroup>
@@ -20,6 +22,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\ds2_gas_scaler.html">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\ds2_tank_editor.html">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </EmbeddedResource>

@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DS2 GAS UI Scaler</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/dark.css" />
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace-autoloader.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Cinzel:wght@600;800&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --jb-gold:        #c9a84c;
+      --jb-gold-bright: #f0c96a;
+      --jb-gold-dim:    #7a5e25;
+      --jb-bg:          #0d0d0f;
+      --jb-surface:     #141418;
+      --jb-surface2:    #1c1c22;
+      --jb-surface3:    #25252d;
+      --jb-border:      #2e2e38;
+      --jb-text:        #c8c8d4;
+      --jb-text-dim:    #5a5a6e;
+      --jb-red:         #e05252;
+      --jb-green:       #5cb87a;
+      --jb-blue:        #5b9fd6;
+      --jb-purple:      #9b72cf;
+      --jb-cyan:        #4ec9d4;
+      --jb-orange:      #d4945b;
+
+      --sl-color-primary-50:  #fdf5e0;
+      --sl-color-primary-100: #f7e6b0;
+      --sl-color-primary-200: #f0d47e;
+      --sl-color-primary-300: #e8c24c;
+      --sl-color-primary-400: #ddb233;
+      --sl-color-primary-500: #c9a84c;
+      --sl-color-primary-600: #a88930;
+      --sl-color-primary-700: #866b1e;
+      --sl-color-primary-800: #634e0f;
+      --sl-color-primary-900: #3f3005;
+      --sl-color-primary-950: #1e1600;
+      --sl-font-mono: 'Share Tech Mono', monospace;
+      --sl-input-background-color: var(--jb-surface2);
+      --sl-input-border-color: var(--jb-border);
+      --sl-input-color: var(--jb-text);
+      --sl-panel-background-color: var(--jb-surface);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { color-scheme: dark; }
+
+    body {
+      background: var(--jb-bg);
+      color: var(--jb-text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #0d0d0f 0%, #1a1608 60%, #0d0d0f 100%);
+      border-bottom: 1px solid var(--jb-gold-dim);
+      padding: 18px 32px 14px;
+      display: flex; align-items: center; gap: 20px;
+      position: relative; overflow: hidden;
+    }
+    header::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--jb-gold), transparent);
+    }
+    .header-icon { font-size: 2rem; filter: drop-shadow(0 0 8px var(--jb-gold)); }
+    .header-titles h1 {
+      font-family: 'Cinzel', serif; font-size: 1.35rem; font-weight: 800;
+      letter-spacing: 0.12em; color: var(--jb-gold-bright);
+      text-shadow: 0 0 18px rgba(201,168,76,0.4); line-height: 1.1;
+    }
+    .header-titles p { font-size: 0.7rem; color: var(--jb-gold-dim); letter-spacing: 0.25em; text-transform: uppercase; margin-top: 2px; }
+    .header-badge {
+      margin-left: auto; background: var(--jb-surface3); border: 1px solid var(--jb-gold-dim);
+      border-radius: 4px; padding: 4px 10px; font-size: 0.68rem; color: var(--jb-gold);
+      letter-spacing: 0.15em; text-transform: uppercase;
+    }
+
+    /* ── Tabs ── */
+    .tab-bar {
+      display: flex; gap: 0;
+      background: var(--jb-surface2);
+      border-bottom: 1px solid var(--jb-border);
+      padding: 0 28px;
+    }
+    .tab-btn {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--jb-text-dim); font-family: 'Share Tech Mono', monospace;
+      font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+      padding: 12px 20px; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: var(--jb-gold); }
+    .tab-btn.active { color: var(--jb-gold-bright); border-bottom-color: var(--jb-gold); }
+
+    /* ── Main ── */
+    main { flex: 1; display: flex; flex-direction: column; }
+    .tab-panel { display: none; flex-direction: column; gap: 16px; padding: 20px 28px 28px; max-width: 1400px; width: 100%; margin: 0 auto; }
+    .tab-panel.active { display: flex; }
+
+    /* ── Controls bar ── */
+    .controls-bar {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      background: var(--jb-surface); border: 1px solid var(--jb-border);
+      border-radius: 8px; padding: 14px 18px;
+    }
+    .controls-bar label { font-size: 0.72rem; color: var(--jb-gold); letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap; }
+    .resolution-info { margin-left: auto; font-size: 0.7rem; color: var(--jb-text-dim); text-align: right; line-height: 1.6; }
+    .resolution-info strong { color: var(--jb-gold); }
+    .scale-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .scale-badge {
+      background: var(--jb-surface3); border: 1px solid var(--jb-border);
+      border-radius: 4px; padding: 3px 8px; font-size: 0.68rem; color: var(--jb-cyan); letter-spacing: 0.1em;
+    }
+    .scale-badge span { color: var(--jb-gold-bright); }
+
+    /* ── Editor panels ── */
+    .editors { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .editors { grid-template-columns: 1fr; } }
+
+    .editor-panel {
+      display: flex; flex-direction: column;
+      background: var(--jb-surface); border: 1px solid var(--jb-border);
+      border-radius: 8px; overflow: hidden;
+    }
+    .panel-header {
+      display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+      background: var(--jb-surface2); border-bottom: 1px solid var(--jb-border);
+    }
+    .dot-row { display: flex; gap: 5px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--jb-border); }
+    .panel-title { font-size: 0.68rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--jb-gold); }
+    .panel-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    .editor-wrap { position: relative; flex: 1; display: flex; min-height: 340px; }
+    .line-numbers {
+      padding: 14px 10px 14px 14px;
+      font-size: 0.72rem; line-height: 1.6; text-align: left;
+      user-select: none; min-width: 46px; overflow: hidden; white-space: pre;
+      z-index: 2; margin-inline: -2%;
+    }
+    textarea.gas-editor {
+      flex: 1; width: 100%; min-height: 340px; background: transparent;
+      border: none; outline: none; resize: vertical; color: transparent;
+      caret-color: var(--jb-gold-bright); font-family: 'Share Tech Mono', monospace;
+      font-size: 0.78rem; line-height: 1.6; padding: 14px;
+      position: absolute; inset: 0; z-index: 2; white-space: pre; overflow: auto;
+    }
+    textarea.gas-editor::selection { background: rgba(201,168,76,0.2); }
+    .highlight-layer {
+      position: absolute; inset: 0; padding: 14px;
+      font-family: 'Share Tech Mono', monospace; font-size: 0.78rem; line-height: 1.6;
+      white-space: pre; overflow: hidden; pointer-events: none; z-index: 1; word-break: break-all;
+    }
+
+    /* ── GAS token colors ── */
+    .tok-comment  { color: var(--jb-text-dim); font-style: italic; }
+    .tok-brace    { color: var(--jb-gold-dim); }
+    .tok-key      { color: var(--jb-cyan); }
+    .tok-eq       { color: var(--jb-text-dim); }
+    .tok-rect     { color: var(--jb-orange); font-weight: bold; }
+    .tok-rect-changed { color: var(--jb-gold-bright); font-weight: bold; text-decoration: underline; text-decoration-color: rgba(201,168,76,0.4); }
+    .tok-num      { color: var(--jb-green); }
+    .tok-str      { color: var(--jb-purple); }
+    .tok-bool     { color: var(--jb-red); }
+    .tok-semi     { color: var(--jb-text-dim); }
+    .tok-section  { color: var(--jb-blue); font-weight: bold; }
+    .tok-plain    { color: var(--jb-text); }
+
+    /* ── Action row ── */
+    .action-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    sl-button::part(base) { font-family: 'Share Tech Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.75rem; }
+    .stat-bar { display: flex; gap: 16px; font-size: 0.68rem; color: var(--jb-text-dim); }
+    .stat-bar span { color: var(--jb-gold); }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex; flex-wrap: wrap; gap: 10px 18px;
+      background: var(--jb-surface); border: 1px solid var(--jb-border);
+      border-radius: 8px; padding: 10px 16px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.65rem; letter-spacing: 0.1em; }
+    .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+    /* ── Batch panel ── */
+    .batch-drop-zone {
+      border: 2px dashed var(--jb-gold-dim); border-radius: 10px;
+      background: var(--jb-surface); padding: 36px 24px;
+      text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .batch-drop-zone:hover, .batch-drop-zone.drag-over {
+      border-color: var(--jb-gold); background: rgba(201,168,76,0.04);
+    }
+    .batch-drop-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .drop-icon { font-size: 2.5rem; margin-bottom: 10px; filter: drop-shadow(0 0 6px var(--jb-gold-dim)); }
+    .drop-title { font-family: 'Cinzel', serif; font-size: 1rem; color: var(--jb-gold-bright); letter-spacing: 0.1em; margin-bottom: 6px; }
+    .drop-sub { font-size: 0.68rem; color: var(--jb-text-dim); letter-spacing: 0.12em; line-height: 1.8; }
+    .drop-sub strong { color: var(--jb-cyan); }
+
+    /* ── File tree ── */
+    .batch-layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
+    @media (max-width: 900px) { .batch-layout { grid-template-columns: 1fr; } }
+
+    .file-tree-panel {
+      background: var(--jb-surface); border: 1px solid var(--jb-border);
+      border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .file-tree-header {
+      padding: 10px 14px; background: var(--jb-surface2);
+      border-bottom: 1px solid var(--jb-border);
+      font-size: 0.68rem; color: var(--jb-gold); letter-spacing: 0.2em; text-transform: uppercase;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .file-tree-header .file-count { margin-left: auto; color: var(--jb-cyan); }
+    .file-tree-body { overflow-y: auto; max-height: 440px; padding: 8px 0; }
+
+    .tree-folder {
+      padding: 4px 14px; font-size: 0.7rem; color: var(--jb-gold);
+      letter-spacing: 0.1em; display: flex; align-items: center; gap: 6px;
+    }
+    .tree-file {
+      padding: 3px 14px 3px 28px; font-size: 0.68rem; color: var(--jb-text-dim);
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
+      transition: background 0.1s, color 0.1s;
+    }
+    .tree-file:hover { background: var(--jb-surface3); color: var(--jb-text); }
+    .tree-file.selected { background: rgba(201,168,76,0.1); color: var(--jb-gold-bright); }
+    .tree-file .file-status { margin-left: auto; font-size: 0.6rem; }
+    .status-pending  { color: var(--jb-text-dim); }
+    .status-done     { color: var(--jb-green); }
+    .status-skipped  { color: var(--jb-text-dim); }
+
+    /* ── Batch preview ── */
+    .batch-preview-panel {
+      background: var(--jb-surface); border: 1px solid var(--jb-border);
+      border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .batch-preview-header {
+      padding: 10px 16px; background: var(--jb-surface2);
+      border-bottom: 1px solid var(--jb-border);
+      font-size: 0.68rem; color: var(--jb-gold); letter-spacing: 0.2em; text-transform: uppercase;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .preview-filename { color: var(--jb-cyan); font-size: 0.72rem; }
+    .batch-preview-body {
+      overflow: auto; max-height: 440px; padding: 14px;
+      font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; line-height: 1.6;
+      white-space: pre;
+    }
+
+    /* ── Batch action bar ── */
+    .batch-action-bar {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      background: var(--jb-surface); border: 1px solid var(--jb-border);
+      border-radius: 8px; padding: 14px 18px;
+    }
+    .batch-stats { display: flex; gap: 18px; font-size: 0.68rem; color: var(--jb-text-dim); flex-wrap: wrap; }
+    .batch-stats span { color: var(--jb-gold); }
+
+    /* ── Progress bar ── */
+    .progress-wrap { width: 100%; background: var(--jb-surface3); border-radius: 4px; height: 6px; overflow: hidden; }
+    .progress-bar  { height: 100%; background: linear-gradient(90deg, var(--jb-gold-dim), var(--jb-gold-bright)); border-radius: 4px; transition: width 0.2s; width: 0%; }
+
+    /* ── Footer ── */
+    footer { text-align: center; padding: 12px; font-size: 0.62rem; color: var(--jb-text-dim); border-top: 1px solid var(--jb-border); letter-spacing: 0.18em; }
+    sl-alert { --sl-font-size-small: 0.75rem; }
+  </style>
+</head>
+<body class="sl-theme-dark">
+
+<header>
+  <div class="header-icon"></div>
+  <div class="header-titles">
+    <h1>DS2 GAS UI Scaler</h1>
+    <p>Dungeon Siege II · UI Coordinate Rescaler</p>
+  </div>
+  <div class="header-badge">TANK EDITOR Tools</div>
+</header>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="single">📄 Single File Editor</button>
+  <button class="tab-btn" data-tab="batch">📁 Batch Folder Patcher</button>
+</div>
+
+<main>
+
+  <!-- ════════════════════════════════════════════════════
+       TAB 1: SINGLE FILE EDITOR
+  ════════════════════════════════════════════════════ -->
+  <div class="tab-panel active" id="tab-single">
+
+    <!-- Controls -->
+    <div class="controls-bar">
+      <label>Target Resolution</label>
+<sl-select id="res-select" value="1920x1080" size="small" style="min-width:240px">
+  <sl-option value="600x800">600 × 800 — Original (No Change)</sl-option>
+  <sl-option value="750x1000">750 × 1000 — 1.25x Scale</sl-option>
+  <sl-option value="900x1200">900 × 1200 — 1.5x Scale</sl-option>
+  <sl-option value="1050x1400">1050 × 1400 — 1.75x Scale</sl-option>
+  <sl-option value="1200x1600">1200 × 1600 — 2x Scale</sl-option>
+  <sl-option value="1350x1800">1350 × 1800 — 2.25x Scale</sl-option>
+  <sl-option value="1500x2000">1500 × 2000 — 2.5x Scale</sl-option>
+  <sl-option value="1650x2200">1650 × 2200 — 2.75x Scale</sl-option>
+  <sl-option value="1800x2400">1800 × 2400 — 3x Scale</sl-option>
+  <sl-option value="1950x2600">1950 × 2600 — 3.25x Scale</sl-option>
+  <sl-option value="2100x2800">2100 × 2800 — 3.5x Scale</sl-option>
+  <sl-option value="2250x3000">2250 × 3000 — 3.75x Scale</sl-option>
+  <sl-option value="2400x3200">2400 × 3200 — 4x Scale</sl-option>
+  <sl-option value="2550x3400">2550 × 3400 — 4.25x Scale</sl-option>
+  <sl-option value="2700x3600">2700 × 3600 — 4.5x Scale</sl-option>
+  <sl-option value="2850x3800">2850 × 3800 — 4.75x Scale</sl-option>
+  <sl-option value="3000x4000">3000 × 4000 — 5x Scale</sl-option>
+  <sl-option value="3150x4200">3150 × 4200 — 5.25x Scale</sl-option>
+  <sl-option value="3300x4400">3300 × 4400 — 5.5x Scale</sl-option>
+  <sl-option value="3450x4600">3450 × 4600 — 5.75x Scale</sl-option>
+  <sl-option value="3600x4800">3600 × 4800 — 6x Scale</sl-option>
+  <sl-option value="3750x5000">3750 × 5000 — 6.25x Scale</sl-option>
+  <sl-option value="3900x5200">3900 × 5200 — 6.5x Scale</sl-option>
+  <sl-option value="4050x5400">4050 × 5400 — 6.75x Scale</sl-option>
+  <sl-option value="4200x5600">4200 × 5600 — 7x Scale</sl-option>
+  <sl-option value="4350x5800">4350 × 5800 — 7.25x Scale</sl-option>
+  <sl-option value="4500x6000">4500 × 6000 — 7.5x Scale</sl-option>
+  <sl-option value="4650x6200">4650 × 6200 — 7.75x Scale</sl-option>
+  <sl-option value="4800x6400">4800 × 6400 — 8x Scale</sl-option>
+  <sl-option value="4950x6600">4950 × 6600 — 8.25x Scale</sl-option>
+  <sl-option value="5100x6800">5100 × 6800 — 8.5x Scale</sl-option>
+  <sl-option value="800x600">800 × 600 — SVGA Landscape</sl-option>
+  <sl-option value="1024x768">1024 × 768 — XGA</sl-option>
+  <sl-option value="1280x720">1280 × 720 — HD 720p</sl-option>
+  <sl-option value="1280x800">1280 × 800 — WXGA</sl-option>
+  <sl-option value="1280x1024">1280 × 1024 — SXGA</sl-option>
+  <sl-option value="1366x768">1366 × 768 — HD+ (Laptop)</sl-option>
+  <sl-option value="1440x900">1440 × 900 — WXGA+</sl-option>
+  <sl-option value="1600x900">1600 × 900 — HD+</sl-option>
+  <sl-option value="1920x1080">1920 × 1080 — Full HD 1080p</sl-option>
+  <sl-option value="2048x1152">2048 × 1152 — QWXGA</sl-option>
+  <sl-option value="2560x1440">2560 × 1440 — QHD 1440p</sl-option>
+  <sl-option value="2560x1600">2560 × 1600 — WQXGA</sl-option>
+  <sl-option value="3440x1440">3440 × 1440 — UltraWide 1440p</sl-option>
+  <sl-option value="3840x2160">3840 × 2160 — 4K UHD</sl-option>
+  <sl-option value="5120x2880">5120 × 2880 — 5K</sl-option>
+</sl-select>
+      <div class="scale-badges">
+        <div class="scale-badge">X Scale: <span id="badge-x">×3.2000</span></div>
+        <div class="scale-badge">Y Scale: <span id="badge-y">×1.3500</span></div>
+      </div>
+      <div class="resolution-info">
+        <div>Base: <strong>600 × 800</strong></div>
+        <div id="target-label">Target: <strong>1920 × 1080</strong></div>
+      </div>
+    </div>
+
+    <!-- Editors -->
+    <div class="editors">
+      <div class="editor-panel">
+        <div class="panel-header">
+          <div class="dot-row"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <div class="panel-title">📄 Input — Original GAS</div>
+          <div class="panel-actions">
+            <sl-button size="small" variant="default" id="btn-clear">Clear</sl-button>
+            <sl-button size="small" variant="default" id="btn-paste">Paste</sl-button>
+          </div>
+        </div>
+        <div class="editor-wrap">
+          <div class="line-numbers" id="input-lines">1</div>
+          <div class="highlight-layer" id="input-highlight"></div>
+          <textarea class="gas-editor" id="input-area" spellcheck="false" placeholder="// Paste your .gas file contents here...
+// Example:
+[interface_root]
+{
+    [my_button]
+    {
+        rect = 10,20,200,40;
+        offset = 5,5;
+    }
+}"></textarea>
+        </div>
+      </div>
+
+      <div class="editor-panel">
+        <div class="panel-header">
+          <div class="dot-row"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <div class="panel-title">✨ Output — Scaled GAS</div>
+          <div class="panel-actions">
+            <sl-button size="small" variant="default" id="btn-copy">Copy</sl-button>
+            <sl-button size="small" variant="default" id="btn-dl">Download</sl-button>
+          </div>
+        </div>
+        <div class="editor-wrap">
+          <div class="line-numbers" id="output-lines">1</div>
+          <div class="highlight-layer" id="output-highlight"></div>
+          <textarea class="gas-editor" id="output-area" spellcheck="false" readonly placeholder="// Scaled output will appear here..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action row -->
+    <div class="action-row">
+      <sl-button variant="primary" size="medium" id="btn-scale">⚔️ &nbsp;Scale Coordinates</sl-button>
+      <sl-button variant="default" size="medium" id="btn-reset">↺ &nbsp;Reset</sl-button>
+      <div class="stat-bar">
+        <div>Rects Found: <span id="stat-found">—</span></div>
+        <div>Rects Scaled: <span id="stat-scaled">—</span></div>
+        <div>Lines: <span id="stat-lines">—</span></div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-gold-bright)"></div>Block Header</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-cyan)"></div>Property Key</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-orange)"></div>rect = (coords)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-green)"></div>Numbers</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-purple)"></div>Strings</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-red)"></div>Booleans</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-blue)"></div>Sections / [headers]</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-text-dim)"></div>Comments</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--jb-gold-bright);opacity:0.7"></div>✦ Changed Rects (output)</div>
+    </div>
+
+  </div><!-- /tab-single -->
+
+
+  <!-- ════════════════════════════════════════════════════
+       TAB 2: BATCH FOLDER PATCHER
+  ════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-batch">
+
+    <!-- Drop zone (shown when no files loaded) -->
+    <div class="batch-drop-zone" id="batch-drop-zone">
+      <input type="file" id="folder-input" webkitdirectory multiple accept=".gas" />
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">Drop a Folder or Click to Browse</div>
+      <div class="drop-sub">
+        Recursively finds every <strong>.gas</strong> file in all subdirectories.<br>
+        Files are read-only — scaled copies are bundled into a <strong>.zip</strong> download<br>
+        preserving the original folder structure.
+      </div>
+    </div>
+
+    <!-- Controls bar (same resolution picker, shared state) -->
+    <div class="controls-bar" id="batch-controls" style="display:none">
+      <label>Target Resolution</label>
+      <sl-select id="batch-res-select" value="1920x1080" size="small" style="min-width:240px">
+        <sl-option value="600x800">600 × 800 — Original (No Change)</sl-option>
+        <sl-option value="800x600">800 × 600 — SVGA Landscape</sl-option>
+        <sl-option value="1024x768">1024 × 768 — XGA</sl-option>
+        <sl-option value="1280x720">1280 × 720 — HD 720p</sl-option>
+        <sl-option value="1280x800">1280 × 800 — WXGA</sl-option>
+        <sl-option value="1280x1024">1280 × 1024 — SXGA</sl-option>
+        <sl-option value="1366x768">1366 × 768 — HD+ (Laptop)</sl-option>
+        <sl-option value="1440x900">1440 × 900 — WXGA+</sl-option>
+        <sl-option value="1600x900">1600 × 900 — HD+</sl-option>
+        <sl-option value="1920x1080">1920 × 1080 — Full HD 1080p</sl-option>
+        <sl-option value="2048x1152">2048 × 1152 — QWXGA</sl-option>
+        <sl-option value="2560x1440">2560 × 1440 — QHD 1440p</sl-option>
+        <sl-option value="2560x1600">2560 × 1600 — WQXGA</sl-option>
+        <sl-option value="3440x1440">3440 × 1440 — UltraWide 1440p</sl-option>
+        <sl-option value="3840x2160">3840 × 2160 — 4K UHD</sl-option>
+        <sl-option value="5120x2880">5120 × 2880 — 5K</sl-option>
+      </sl-select>
+      <div class="scale-badges">
+        <div class="scale-badge">X Scale: <span id="batch-badge-x">×3.2000</span></div>
+        <div class="scale-badge">Y Scale: <span id="batch-badge-y">×1.3500</span></div>
+      </div>
+      <div class="resolution-info">
+        <div>Base: <strong>600 × 800</strong></div>
+        <div id="batch-target-label">Target: <strong>1920 × 1080</strong></div>
+      </div>
+      <sl-button size="small" variant="default" id="btn-batch-clear-files" style="margin-left:auto">✕ Clear Files</sl-button>
+    </div>
+
+    <!-- File tree + preview (shown after files loaded) -->
+    <div class="batch-layout" id="batch-layout" style="display:none">
+
+      <div class="file-tree-panel">
+        <div class="file-tree-header">
+          📁 File Tree
+          <span class="file-count" id="batch-file-count">0 files</span>
+        </div>
+        <div class="file-tree-body" id="file-tree-body"></div>
+      </div>
+
+      <div class="batch-preview-panel">
+        <div class="batch-preview-header">
+          <span>Preview</span>
+          <span class="preview-filename" id="preview-filename">— select a file —</span>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <sl-button size="small" variant="default" id="btn-preview-original">Original</sl-button>
+            <sl-button size="small" variant="default" id="btn-preview-scaled">Scaled</sl-button>
+          </div>
+        </div>
+        <div class="batch-preview-body" id="batch-preview-body">
+          <span style="color:var(--jb-text-dim)">// Click a file in the tree to preview it here</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Batch action bar -->
+    <div class="batch-action-bar" id="batch-action-bar" style="display:none">
+      <sl-button variant="primary" size="medium" id="btn-batch-run">⚔️ &nbsp;Patch All &amp; Download ZIP</sl-button>
+      <div class="progress-wrap" id="progress-wrap" style="display:none;flex:1;min-width:120px">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="batch-stats">
+        <div>Files: <span id="bs-files">—</span></div>
+        <div>Total Rects: <span id="bs-rects">—</span></div>
+        <div>Changed: <span id="bs-changed">—</span></div>
+        <div>Skipped (0 rects): <span id="bs-skipped">—</span></div>
+      </div>
+    </div>
+
+  </div><!-- /tab-batch -->
+
+</main>
+
+<footer>TANK EDITOR DS2 TOOLS · GAS UI SCALER · BASE RESOLUTION 600 × 800</footer>
+
+<sl-alert id="toast-ok" variant="success" duration="2500" closable>
+  <sl-icon slot="icon" name="check2-circle"></sl-icon>
+  <span id="toast-msg">Done!</span>
+</sl-alert>
+<sl-alert id="toast-err" variant="danger" duration="3500" closable>
+  <sl-icon slot="icon" name="exclamation-octagon"></sl-icon>
+  <span id="toast-err-msg">Error</span>
+</sl-alert>
+
+<!-- JSZip for batch download -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+<script type="module">
+// ══════════════════════════════════════════════════════════════════════════════
+// SHARED STATE — resolution is managed as a plain JS variable, never reading
+// sl-select.value at init time to avoid the Shoelace upgrade timing bug.
+// ══════════════════════════════════════════════════════════════════════════════
+const BASE_W = 600, BASE_H = 800;
+const DEFAULT_RES = '1920x1080';
+let currentRes = DEFAULT_RES;
+
+function parseRes(val) {
+  const parts = String(val).split('x');
+  return { w: Number(parts[0]) || BASE_W, h: Number(parts[1]) || BASE_H };
+}
+function getScales(val) {
+  const { w, h } = parseRes(val || DEFAULT_RES);
+  return { sx: w / BASE_W, sy: h / BASE_H };
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function toast(msg, err = false) {
+  if (err) {
+    document.getElementById('toast-err-msg').textContent = msg;
+    document.getElementById('toast-err').toast();
+  } else {
+    document.getElementById('toast-msg').textContent = msg;
+    document.getElementById('toast-ok').toast();
+  }
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RESOLUTION BADGES — update both single & batch badges from currentRes
+// ══════════════════════════════════════════════════════════════════════════════
+function updateAllBadges() {
+  const val = currentRes;
+  const { w, h } = parseRes(val);
+  const { sx, sy } = getScales(val);
+  const xStr = `×${sx.toFixed(4)}`;
+  const yStr = `×${sy.toFixed(4)}`;
+  const tStr = `Target: <strong>${w} × ${h}</strong>`;
+
+  document.getElementById('badge-x').textContent = xStr;
+  document.getElementById('badge-y').textContent = yStr;
+  document.getElementById('target-label').innerHTML = tStr;
+  document.getElementById('batch-badge-x').textContent = xStr;
+  document.getElementById('batch-badge-y').textContent = yStr;
+  document.getElementById('batch-target-label').innerHTML = tStr;
+}
+
+// Wire both selects — they both update the single shared currentRes
+['res-select', 'batch-res-select'].forEach(id => {
+  document.getElementById(id).addEventListener('sl-change', (e) => {
+    const v = e.target.value;
+    if (v && v.includes('x')) {
+      currentRes = v;
+      // Keep the other select in sync visually (Shoelace value must be set after upgrade)
+      const otherId = id === 'res-select' ? 'batch-res-select' : 'res-select';
+      try { document.getElementById(otherId).value = v; } catch(_) {}
+    }
+    updateAllBadges();
+    autoScale(); // live-update single editor if content exists
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GAS SYNTAX HIGHLIGHTER
+// ══════════════════════════════════════════════════════════════════════════════
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlightGas(code, markChangedRects = false) {
+  return code.split('\n').map(line => {
+    if (/^\s*(\/\/|#)/.test(line))
+      return `<span class="tok-comment">${escHtml(line)}</span>`;
+
+    if (/^\s*\[[^\]]+\]\s*$/.test(line))
+      return line.replace(/^(\s*)(\[[^\]]+\])(\s*)$/,
+        (_, pre, sec, post) => `${escHtml(pre)}<span class="tok-section">${escHtml(sec)}</span>${escHtml(post)}`);
+
+    if (/^\s*[{}]\s*$/.test(line))
+      return `<span class="tok-brace">${escHtml(line)}</span>`;
+
+    const rectM = line.match(/^(\s*)(rect)(\s*=\s*)(-?\d+),(-?\d+),(-?\d+),(-?\d+)(;?.*)$/i);
+    if (rectM) {
+      const [, ind, key, eq, n1, n2, n3, n4, rest] = rectM;
+      const cls = markChangedRects ? 'tok-rect-changed' : 'tok-rect';
+      return `${escHtml(ind)}<span class="tok-key">${escHtml(key)}</span><span class="tok-eq">${escHtml(eq)}</span><span class="${cls}">${escHtml(n1)},${escHtml(n2)},${escHtml(n3)},${escHtml(n4)}</span><span class="tok-semi">${escHtml(rest)}</span>`;
+    }
+
+    const strM = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*)(".*?"|'.*?')(;?.*)$/);
+    if (strM) {
+      const [, ind, key, eq, val, rest] = strM;
+      return `${escHtml(ind)}<span class="tok-key">${escHtml(key)}</span><span class="tok-eq">${escHtml(eq)}</span><span class="tok-str">${escHtml(val)}</span><span class="tok-semi">${escHtml(rest)}</span>`;
+    }
+
+    const boolM = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*)(true|false|yes|no)(;?.*)$/i);
+    if (boolM) {
+      const [, ind, key, eq, val, rest] = boolM;
+      return `${escHtml(ind)}<span class="tok-key">${escHtml(key)}</span><span class="tok-eq">${escHtml(eq)}</span><span class="tok-bool">${escHtml(val)}</span><span class="tok-semi">${escHtml(rest)}</span>`;
+    }
+
+    const numM = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*=\s*)([-\d.,\s]+)(;?.*)$/);
+    if (numM) {
+      const [, ind, key, eq, val, rest] = numM;
+      return `${escHtml(ind)}<span class="tok-key">${escHtml(key)}</span><span class="tok-eq">${escHtml(eq)}</span><span class="tok-num">${escHtml(val)}</span><span class="tok-semi">${escHtml(rest)}</span>`;
+    }
+
+    return `<span class="tok-plain">${escHtml(line)}</span>`;
+  }).join('\n');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SCALE CORE — shared by both modes
+// ══════════════════════════════════════════════════════════════════════════════
+function scaleCode(code) {
+  const { sx, sy } = getScales(currentRes);
+  if (currentRes === '600x800') return { result: code, found: 0, scaled: 0 };
+
+  let found = 0, scaled = 0;
+  const result = code.replace(
+    /rect\s*=\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)\s*;/gi,
+    (_, x1, y1, x2, y2) => {
+      found++;
+      const nx1 = Math.round(+x1 * sx), ny1 = Math.round(+y1 * sy);
+      const nx2 = Math.round(+x2 * sx), ny2 = Math.round(+y2 * sy);
+      if (nx1 !== +x1 || ny1 !== +y1 || nx2 !== +x2 || ny2 !== +y2) scaled++;
+      return `rect = ${nx1},${ny1},${nx2},${ny2};`;
+    }
+  );
+  return { result, found, scaled };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SINGLE FILE EDITOR
+// ══════════════════════════════════════════════════════════════════════════════
+const inputArea   = document.getElementById('input-area');
+const outputArea  = document.getElementById('output-area');
+const inputHL     = document.getElementById('input-highlight');
+const outputHL    = document.getElementById('output-highlight');
+const inputLines  = document.getElementById('input-lines');
+const outputLines = document.getElementById('output-lines');
+
+function updateLineNumbers(textarea, lnEl) {
+  const n = textarea.value.split('\n').length;
+  lnEl.textContent = Array.from({length: n}, (_, i) => i + 1).join('\n');
+}
+function syncScroll(ta, hl, ln) {
+  hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; ln.scrollTop = ta.scrollTop;
+}
+
+function refreshInput() {
+  inputHL.innerHTML = highlightGas(inputArea.value, false);
+  updateLineNumbers(inputArea, inputLines);
+  document.getElementById('stat-lines').textContent = inputArea.value.split('\n').length;
+}
+
+function autoScale() {
+  if (!inputArea.value.trim()) return;
+  const { result, found, scaled } = scaleCode(inputArea.value);
+  outputArea.value = result;
+  outputHL.innerHTML = highlightGas(result, currentRes !== '600x800');
+  updateLineNumbers(outputArea, outputLines);
+  document.getElementById('stat-found').textContent  = found;
+  document.getElementById('stat-scaled').textContent = scaled;
+}
+
+inputArea.addEventListener('input', refreshInput);
+inputArea.addEventListener('scroll', () => syncScroll(inputArea, inputHL, inputLines));
+outputArea.addEventListener('scroll', () => syncScroll(outputArea, outputHL, outputLines));
+
+document.getElementById('btn-scale').addEventListener('click', () => {
+  if (!inputArea.value.trim()) { toast('Paste some GAS code first.', true); return; }
+  autoScale();
+  toast(`Scaled → ${currentRes.replace('x',' × ')}`);
+});
+
+document.getElementById('btn-copy').addEventListener('click', async () => {
+  if (!outputArea.value.trim()) { toast('Nothing to copy.', true); return; }
+  try { await navigator.clipboard.writeText(outputArea.value); toast('Copied!'); }
+  catch { toast('Clipboard denied — use Ctrl+A, Ctrl+C.', true); }
+});
+
+document.getElementById('btn-dl').addEventListener('click', () => {
+  if (!outputArea.value.trim()) { toast('Nothing to download.', true); return; }
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([outputArea.value], {type:'text/plain'})),
+    download: `scaled_${currentRes.replace('x','_')}.gas`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('Downloaded!');
+});
+
+document.getElementById('btn-paste').addEventListener('click', async () => {
+  try {
+    inputArea.value = await navigator.clipboard.readText();
+    refreshInput(); toast('Pasted!');
+  } catch { toast('Clipboard read denied — use Ctrl+V.', true); }
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  inputArea.value = ''; refreshInput();
+  ['stat-found','stat-scaled','stat-lines'].forEach(id => document.getElementById(id).textContent = '—');
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  outputArea.value = ''; outputHL.innerHTML = '';
+  updateLineNumbers(outputArea, outputLines);
+  ['stat-found','stat-scaled'].forEach(id => document.getElementById(id).textContent = '—');
+  toast('Output cleared.');
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BATCH FOLDER PATCHER
+// ══════════════════════════════════════════════════════════════════════════════
+let batchFiles = []; // Array of { path, file, originalText, scaledText, found, scaled }
+let selectedFileIdx = -1;
+let previewMode = 'scaled';
+
+const dropZone      = document.getElementById('batch-drop-zone');
+const folderInput   = document.getElementById('folder-input');
+const batchLayout   = document.getElementById('batch-layout');
+const batchControls = document.getElementById('batch-controls');
+const batchActionBar= document.getElementById('batch-action-bar');
+const fileTreeBody  = document.getElementById('file-tree-body');
+const batchPreview  = document.getElementById('batch-preview-body');
+
+// Drag-over styles
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  // Can't use DataTransferItem with webkitGetAsEntry reliably for folder reading
+  // — the file input is more reliable; nudge the user.
+  toast('Use the folder picker button for best results on all browsers.', true);
+});
+
+folderInput.addEventListener('change', async () => {
+  const files = Array.from(folderInput.files).filter(f => f.name.toLowerCase().endsWith('.gas'));
+  if (!files.length) { toast('No .gas files found in that folder.', true); return; }
+  await loadBatchFiles(files);
+});
+
+async function loadBatchFiles(files) {
+  batchFiles = [];
+  // Read all files
+  for (const file of files) {
+    const path = file.webkitRelativePath || file.name;
+    const text = await file.text();
+    batchFiles.push({ path, file, originalText: text, scaledText: '', found: 0, scaled: 0, status: 'pending' });
+  }
+  // Pre-process all
+  processBatchAll();
+  renderFileTree();
+  dropZone.style.display = 'none';
+  batchControls.style.display = 'flex';
+  batchLayout.style.display   = 'grid';
+  batchActionBar.style.display= 'flex';
+  updateBatchStats();
+}
+
+function processBatchAll() {
+  let totalFound = 0, totalScaled = 0, skipped = 0;
+  for (const f of batchFiles) {
+    const { result, found, scaled } = scaleCode(f.originalText);
+    f.scaledText = result;
+    f.found  = found;
+    f.scaled = scaled;
+    f.status = found === 0 ? 'skipped' : 'done';
+    totalFound  += found;
+    totalScaled += scaled;
+    if (found === 0) skipped++;
+  }
+  document.getElementById('bs-files').textContent   = batchFiles.length;
+  document.getElementById('bs-rects').textContent   = totalFound;
+  document.getElementById('bs-changed').textContent = totalScaled;
+  document.getElementById('bs-skipped').textContent = skipped;
+}
+
+function updateBatchStats() {
+  document.getElementById('batch-file-count').textContent = `${batchFiles.length} files`;
+}
+
+// ── File tree renderer ──────────────────────────────────────────────────────
+function renderFileTree() {
+  // Group by folder
+  const folders = {};
+  batchFiles.forEach((f, idx) => {
+    const parts = f.path.split(/[\\/]/);
+    const folder = parts.length > 1 ? parts.slice(0, -1).join('/') : '(root)';
+    if (!folders[folder]) folders[folder] = [];
+    folders[folder].push({ ...f, idx });
+  });
+
+  fileTreeBody.innerHTML = '';
+  Object.keys(folders).sort().forEach(folder => {
+    const folderEl = document.createElement('div');
+    folderEl.className = 'tree-folder';
+    folderEl.innerHTML = `📁 <span>${escHtml(folder)}</span>`;
+    fileTreeBody.appendChild(folderEl);
+
+    folders[folder].forEach(({ path, status, found, scaled, idx }) => {
+      const name = path.split(/[\\/]/).pop();
+      const el = document.createElement('div');
+      el.className = 'tree-file' + (idx === selectedFileIdx ? ' selected' : '');
+      el.dataset.idx = idx;
+
+      const statusIcon = status === 'done' ? `<span class="file-status status-done" title="${found} rects, ${scaled} changed">✓ ${scaled}/${found}</span>`
+                       : `<span class="file-status status-skipped" title="No rect= found">— no rects</span>`;
+      el.innerHTML = `🗎 <span>${escHtml(name)}</span>${statusIcon}`;
+      el.addEventListener('click', () => selectFile(idx));
+      fileTreeBody.appendChild(el);
+    });
+  });
+}
+
+function selectFile(idx) {
+  selectedFileIdx = idx;
+  document.querySelectorAll('.tree-file').forEach(el => {
+    el.classList.toggle('selected', +el.dataset.idx === idx);
+  });
+  const f = batchFiles[idx];
+  document.getElementById('preview-filename').textContent = f.path;
+  renderPreview();
+}
+
+function renderPreview() {
+  if (selectedFileIdx < 0) return;
+  const f = batchFiles[selectedFileIdx];
+  const code  = previewMode === 'original' ? f.originalText : f.scaledText;
+  const mark  = previewMode === 'scaled' && currentRes !== '600x800';
+  batchPreview.innerHTML = highlightGas(code, mark);
+}
+
+document.getElementById('btn-preview-original').addEventListener('click', () => {
+  previewMode = 'original'; renderPreview();
+});
+document.getElementById('btn-preview-scaled').addEventListener('click', () => {
+  previewMode = 'scaled'; renderPreview();
+});
+
+// ── Batch resolution change — re-process all ──────────────────────────────
+document.getElementById('batch-res-select').addEventListener('sl-change', () => {
+  if (batchFiles.length) { processBatchAll(); renderFileTree(); renderPreview(); }
+});
+
+// Re-process when single-editor resolution changes and batch has files
+document.getElementById('res-select').addEventListener('sl-change', () => {
+  if (batchFiles.length) { processBatchAll(); renderFileTree(); renderPreview(); }
+});
+
+// ── Clear batch files ──────────────────────────────────────────────────────
+document.getElementById('btn-batch-clear-files').addEventListener('click', () => {
+  batchFiles = []; selectedFileIdx = -1; folderInput.value = '';
+  dropZone.style.display    = '';
+  batchControls.style.display = 'none';
+  batchLayout.style.display   = 'none';
+  batchActionBar.style.display= 'none';
+  fileTreeBody.innerHTML = '';
+  batchPreview.innerHTML = '<span style="color:var(--jb-text-dim)">// Click a file in the tree to preview it here</span>';
+});
+
+// ── Batch run: build ZIP and download ─────────────────────────────────────
+document.getElementById('btn-batch-run').addEventListener('click', async () => {
+  if (!batchFiles.length) { toast('No files loaded.', true); return; }
+  if (typeof JSZip === 'undefined') { toast('JSZip not loaded — check your internet connection.', true); return; }
+
+  const progressWrap = document.getElementById('progress-wrap');
+  const progressBar  = document.getElementById('progress-bar');
+  progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
+
+  const zip = new JSZip();
+  const total = batchFiles.length;
+
+  for (let i = 0; i < total; i++) {
+    const f = batchFiles[i];
+    // Always re-scale at current resolution to be safe
+    const { result } = scaleCode(f.originalText);
+    zip.file(f.path, result);
+    progressBar.style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+    // Yield to keep UI responsive
+    if (i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  const resTag = currentRes.replace('x','_');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: `ds2_gas_scaled_${resTag}.zip`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+
+  progressBar.style.width = '100%';
+  setTimeout(() => { progressWrap.style.display = 'none'; progressBar.style.width = '0%'; }, 1500);
+  toast(`ZIP ready: ${total} files → ${currentRes.replace('x',' × ')}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INIT — safe: no sl-select.value reads here
+// ══════════════════════════════════════════════════════════════════════════════
+updateAllBadges();
+updateLineNumbers(inputArea,  inputLines);
+updateLineNumbers(outputArea, outputLines);
+</script>
+</body>
+</html>

@@ -63,6 +63,16 @@ namespace DS2_Tank_Viewer.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Byte[].
         /// </summary>
+        public static byte[] ds2_gas_scaler {
+            get {
+                object obj = ResourceManager.GetObject("ds2_gas_scaler", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
         public static byte[] ds2_tank_editor {
             get {
                 object obj = ResourceManager.GetObject("ds2_tank_editor", resourceCulture);
