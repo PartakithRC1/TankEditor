@@ -205,7 +205,10 @@ namespace DS2_Tank_Viewer
             DialogResult dr = DialogResult.Cancel;
             this.Invoke(() =>
             {
-                ofd = new OpenFileDialog { Filter = "DS2 Resource Files (*.ds2res)|*.ds2res" };
+                ofd = new OpenFileDialog
+                {
+                    Filter = "DS2 Resources (*.ds2res)|*.ds2res|DS2 Maps (*.ds2map)|*.ds2map|Maps (*.dsmap)|*.dsmap|Resources (*.dsres)|*.dsres"
+                };
                 dr = ofd.ShowDialog(this);
             });
             if (dr != DialogResult.OK) return;
