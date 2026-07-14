@@ -24,6 +24,11 @@ namespace DS2_Tank_Viewer
         private TankReader currentTank = null;
         private string currentTankFilePath = "";
 
+        // Toggle: true  = build tanks with our own in-process TankWriter (no RTC.exe needed)
+        //         false = fall back to the legacy path: shell out to RTC.exe + PatchToDs2
+        // Flip this to false any time you want to A/B compare output against the original tool.
+        private bool UseInternalTankWriter = true;
+
         // Projects: key = project GUID, value = root folder path
         private readonly Dictionary<string, string> _projects = new();
 
@@ -167,7 +172,11 @@ namespace DS2_Tank_Viewer
 
                 // ── RTC / Pack ──
                 case "createTankRtc":
-                    await HandleCreateTankRtc(root);
+                    // Dispatch to whichever build path is currently toggled on.
+                    if (UseInternalTankWriter)
+                        await HandleCreateTankInternal(root);
+                    else
+                        await HandleCreateTankRtcExternal(root);
                     break;
                 case "browseSourceDir":
                     HandleBrowseSourceDir();
@@ -522,7 +531,87 @@ namespace DS2_Tank_Viewer
                 JsCall($"window.ds2.setBrowsedOut({J(sfd.FileName)})");
         }
 
-        private async Task HandleCreateTankRtc(JsonElement root)
+        /// <summary>
+        /// NEW build path: uses our own in-process TankWriter, no RTC.exe involved.
+        /// Reads the same "createTankRtc" payload the UI already sends, so no JS
+        /// changes are needed - only this handler and the toggle above differ.
+        /// </summary>
+        private async Task HandleCreateTankInternal(JsonElement root)
+        {
+            string sourceDir = root.GetProperty("source").GetString();
+            string outFile = root.GetProperty("out").GetString();
+            string title = root.GetProperty("title").GetString();
+            string author = root.GetProperty("author").GetString();
+            string copyright = root.GetProperty("copyright").GetString();
+            string build = root.GetProperty("build").GetString();
+            string priorityStr = root.GetProperty("priority").GetString();
+            bool dev = root.GetProperty("flagDev").GetBoolean();
+            bool mpXfer = root.GetProperty("flagMpXfer").GetBoolean();
+            bool protect = root.GetProperty("flagProtected").GetBoolean();
+            // flagWait ("-waitonexit") has no meaning here - that flag only makes sense
+            // for RTC.exe's own console window, there's no external process to wait on.
+
+            if (string.IsNullOrWhiteSpace(sourceDir) || !Directory.Exists(sourceDir))
+            {
+                JsCall("window.ds2.onRtcError('Source directory does not exist.')");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(outFile))
+            {
+                JsCall("window.ds2.onRtcError('No output file specified.')");
+                return;
+            }
+
+            uint priority = 0x4000; // PRIORITY_USER default
+            if (!string.IsNullOrEmpty(priorityStr))
+            {
+                if (priorityStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                    uint.TryParse(priorityStr[2..], System.Globalization.NumberStyles.HexNumber, null, out priority);
+                else
+                    uint.TryParse(priorityStr, out priority);
+            }
+
+            // eTankFlags bit values, from TankStructure.h
+            uint flags = 0;
+            if (dev) flags |= 1u << 0;     // TANKFLAG_NON_RETAIL
+            if (mpXfer) flags |= 1u << 1;  // TANKFLAG_ALLOW_MULTIPLAYER_XFER
+            if (protect) flags |= 1u << 2; // TANKFLAG_PROTECTED_CONTENT
+
+            JsCall("window.ds2.setProgress(20,'Building tank (internal writer)…')");
+
+            try
+            {
+                var writer = new TankWriter
+                {
+                    TitleText = title ?? "",
+                    AuthorText = author ?? "",
+                    CopyrightText = copyright ?? "",
+                    BuildText = build ?? "",
+                    Priority = priority,
+                    Flags = flags,
+                    // ProductId defaults to "DSg2" (DS2) already - no PatchToDs2-style
+                    // post-processing needed, unlike the RTC.exe path.
+                };
+
+                JsCall("window.ds2.setProgress(50,'Packing files…')");
+
+                await Task.Run(() => writer.Build(sourceDir, outFile));
+
+                JsCall("window.ds2.setProgress(100,'Complete!')");
+                JsCall($"window.ds2.onRtcSuccess({J($"Tank created: {Path.GetFileName(outFile)}")})");
+            }
+            catch (Exception ex)
+            {
+                JsCall($"window.ds2.onRtcError({J(ex.Message)})");
+            }
+        }
+
+        /// <summary>
+        /// LEGACY build path: shells out to the real RTC.exe and post-patches the
+        /// header to DS2 format. Kept intact so you can flip UseInternalTankWriter
+        /// back to false at any time to A/B compare output against the original tool.
+        /// </summary>
+        private async Task HandleCreateTankRtcExternal(JsonElement root)
         {
             string sourceDir = root.GetProperty("source").GetString();
             string outFile = root.GetProperty("out").GetString();
