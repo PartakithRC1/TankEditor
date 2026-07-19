@@ -1,39 +1,59 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 
 namespace DS2_Tank_Viewer
 {
     /// <summary>
-    /// Writer counterpart to TankReader.cs. Builds a RAW-format Dungeon Siege
-    /// TankFile (.dsres / .dsmap) from a source directory of loose files.
+    /// Writer counterpart to TankReader.cs. Builds a Dungeon Siege TankFile
+    /// (.dsres / .dsmap) from a source directory of loose files.
     ///
-    /// FIRST PASS: writes files uncompressed (DataFormat.Raw == 0). This is
-    /// spec-complete and fully round-trippable against TankReader.Load().
-    /// Zlib chunked-compression writing (DataFormat.Zlib == 1) is the next
-    /// increment on top of this - the header/index layout below already has
-    /// the hooks for it (see WriteCompressedHeaderPlaceholder notes).
-    ///
-    /// Field order in every struct below is a MIRROR of TankReader.ReadHeader /
-    /// TankReader.Load, confirmed against your working reader - not re-derived
-    /// from scratch - so a tank built here should read back byte-identically
-    /// through TankReader.cs.
+    ///   - ProductId ("DSig") and HeaderVersion (1.0.2 / 0x00010002) are DS1-native
+    ///     values - what RTC.exe itself writes, confirmed directly from
+    ///     Header. This writer stays DS1-native on purpose:
+    ///     Form1.cs's PatchToDs2() is applied afterward for the DS2 editor path,
+    ///     same as it already is for the legacy RTC.exe path, so this class alone
+    ///     can still build real, untouched DS1 .res/.map files for callers who
+    ///     don't call PatchToDs2.
+    ///   - Section layout (Header -> pad(16) -> Data -> pad(16) -> DirSet -> FileSet)
+    ///     and IndexSize (DirSet+FileSet only, header excluded)
+    ///   - Each directory's ChildOffsets array is one case-insensitive alphabetical
+    ///     merge of its subdirs and files. sorted-map merge
+    ///     and binary_search over that same array.
+    ///   - Compress = true (default) writes DATAFORMAT_ZLIB with chunked
+    ///     compression, scheme (16KB chunks,
+    ///     5% minimum-ratio fallback to raw, 16-byte in-place-decode overhead
+    ///     margin on full-size chunks) - see the COMPRESSION ENGINE section below
+    ///     for the exact reasoning, cross-checked against a real RTC-built tank.
+    ///     Set Compress = false to force DATAFORMAT_RAW for every file instead.
     /// </summary>
     public class TankWriter
     {
         // ====================== CONSTANTS (TankStructure.h) ======================
 
-        public const uint DATA_SECTION_ALIGNMENT = 4 << 10; // 4096, alignment for start of data section
-        public const uint DATA_ALIGNMENT = 8;                // per-file alignment inside data section
+        // RAW_HEADER_PAD from TankStructure.h - confirmed value
+        // writer now updated to: once between the header/description text and the start of the data
+        // section, and again between the end of the data section and the start of the
+        // DirSet. There is NO 4096-byte ("page") alignment anywhere I was wrong before
+        // data offset is only ever dword-aligned. There is also no
+        // per-file alignment gap inside the data section...
+        // m_FileEntry.m_Offset = currentPos - m_DataOffset with files packed back-to-back,
+        // zero gap. (Both of those - 4096 section alignment and an 8-byte per-file gap -
+        // were guesses in the prior version of this file and did not match what the engine seems to expect.)
+        public const uint RAW_HEADER_PAD = 16;
         public const uint INVALID_OFFSET = 0xFFFFFFFF;
-        // Confirmed (not guessed): DS2_Tank_Viewer's own PatchToDs2() forces bytes
-        // [8,9,10,11] of an RTC-built header to 00 01 01 00, which is exactly the
-        // HeaderVersion DWORD's little-endian bytes -> 0x00010100. That's a real
-        // observed value from a working DS2 pipeline, so this replaces the earlier
-        // guessed MAKEVERSION(1,0,2) packing.
-        public const uint HEADER_VERSION = 0x00010100;
+        // DS1 value. The original TankStructure.h (Scott Bilas / Gas Powered Games)
+        // defines HEADER_VERSION = MAKEVERSION(1,0,2) for Dungeon Siege 1 / LoA, vs.
+        // MAKEVERSION(1,1,0) for DS2. The packing is (major<<16)|(minor<<8)|build,
+        // which is confirmed independently by TankEditors own PatchToDs2(): it forces bytes
+        // [8..11] to 00 01 01 00 -> 0x00010100 little-endian -> exactly
+        // (1<<16)|(1<<8)|0, i.e. version 1.1.0 (DS2). Applying the same packing to
+        // DS1's 1.0.2 gives (1<<16)|(0<<8)|2 = 0x00010002 -> bytes 02 00 01 00.
+        // This is the value RTC.exe writes natively, before PatchToDs2 touches it.
+        public const uint HEADER_VERSION = 0x00010002;
 
         public const int COPYRIGHT_TEXT_LENGTH = 100;
         public const int BUILD_TEXT_LENGTH = 100;
@@ -48,6 +68,20 @@ namespace DS2_Tank_Viewer
         // eFileFlags
         public const ushort FILEFLAG_NONE = 0;
         public const ushort FILEFLAG_INVALID = 1 << 15;
+
+        // ====================== COMPRESSION (constants) ======================
+        public const int CHUNK_SIZE = 16 * 1024;
+        public const float MIN_COMPRESSION_RATIO = 0.05f;
+        public const uint STARTING_OVERHEAD = 16;
+
+        /// <summary>
+        /// If true (default), files are written DATAFORMAT_ZLIB with chunked
+        /// compression, matching RTC.exe's real output byte-for-byte in layout
+        /// (though not necessarily identical compressed bytes, since deflate
+        /// implementations vary slightly - .NET's ZLibStream vs zlib 1.1.4).
+        /// Set false to force DATAFORMAT_RAW for every file (the old behavior).
+        /// </summary>
+        public bool Compress = true;
 
         // ====================== INPUT MODEL ======================
 
@@ -71,7 +105,11 @@ namespace DS2_Tank_Viewer
         }
 
         // Header fields the caller can customize (mirrors TankHeader in TankReader.cs)
-        public FourCC ProductId = new FourCC { c0 = (byte)'D', c1 = (byte)'S', c2 = (byte)'g', c3 = (byte)'2' }; // "DSg2" DS2 by default
+        // DS1 default. PatchToDs2() converts an RTC-built tank from "DSig" (DS1) to
+        // "DSg2" (DS2) by overwriting only bytes[2,3] ('i','g' -> 'g','2'). "DSig" is
+        // also the native ProductId documented in TankStructure.h / confirmed by every
+        // known DS1/.dsres archive (e.g. dump output: "Product id.........: DSig").
+        public FourCC ProductId = new FourCC { c0 = (byte)'D', c1 = (byte)'S', c2 = (byte)'i', c3 = (byte)'g' }; // "DSig" DS1 by default
         public FourCC CreatorId = new FourCC { c0 = (byte)'U', c1 = (byte)'S', c2 = (byte)'E', c3 = (byte)'R' }; // "USER"
         public ProductVersion ProductVersion = new ProductVersion { v1 = 1, v2 = 0, v3 = 0 };
         public ProductVersion MinimumVersion = new ProductVersion { v1 = 1, v2 = 0, v3 = 0 };
@@ -155,7 +193,7 @@ namespace DS2_Tank_Viewer
         ///
         /// NOTE: this intentionally does NOT match TankReader.ReadWideNString,
         /// which reuses the narrow-string alignment formula. That reader path
-        /// backs DescriptionText, a field your extraction flow likely never
+        /// backs DescriptionText, a field extraction flow likely never
         /// exercised with non-empty data, so the mismatch never surfaced. This
         /// writer follows the header spec. If you build a tank with a non-empty
         /// DescriptionText and it round-trips wrong through TankReader.cs, this
@@ -192,7 +230,7 @@ namespace DS2_Tank_Viewer
         // ====================== CRC32 (standard poly 0xEDB88320) ======================
         // NOTE: verify this against a known-good RTC-built tank before relying on it -
         // the exact CRC32 variant (poly / init / xorout) isn't independently confirmed
-        // from the binaries you've provided, this is the standard zlib/PKZIP CRC32.
+        // this is the standard zlib/PKZIP CRC32.
 
         private static readonly uint[] Crc32Table = BuildCrc32Table();
 
@@ -215,6 +253,115 @@ namespace DS2_Tank_Viewer
             foreach (byte b in data)
                 crc = Crc32Table[(crc ^ b) & 0xFF] ^ (crc >> 8);
             return crc ^ 0xFFFFFFFF;
+        }
+
+        // ====================== COMPRESSION ENGINE ======================
+        //    Implements chunked-zlib path
+        //
+        //    the wire format is standard zlib
+        //    (2-byte header + deflate stream + 4-byte Adler32 trailer) at
+        //    Z_DEFAULT_COMPRESSION - exactly what System.IO.Compression.ZLibStream
+        //    produces. Seek(chunk->m_Offset) + independent inflate per chunk - so each
+        //    chunk is verified to be its own complete, independent zlib stream, not
+        //    a single stream spanning chunk boundaries. Where I messed up in the past.
+        //  - A file is split into CHUNK_SIZE (16384-byte) pieces. Any chunk that is
+        //    NOT a full CHUNK_SIZE piece (i.e. the trailing partial chunk, or the
+        //    whole file if it's under 16384 bytes) is compressed with zero
+        //    "overhead" - compress the whole chunk, done. (Also did and undid and did ...ugh lol)
+        //  - Any FULL 16384-byte chunk reserves STARTING_OVERHEAD (16) raw bytes at
+        //    its tail: only the first (write-overhead) bytes are deflated, and the
+        //    last `overhead` bytes are appended uncompressed after the deflate
+        //    stream. (think I've been doing this right for awhile) for any
+        //    correctly-implemented deflate, the first attempt always fits (this
+        //    matches every chunk observed in a real RTC-built tank, which all show
+        //    ExtraBytes == 16, never doubled) - so we do it in one shot rather than
+        //    replicating the retry loop.
+        //  - Per-chunk fallback: if a chunk's compressed size plus overhead isn't
+        //    smaller than the chunk itself, that chunk is stored raw instead
+        //    (CompressedSize == UncompressedSize signals this to the reader).
+        //  - Per-file fallback: after all chunks are done, if the file's overall
+        //    compression ratio is below MIN_COMPRESSION_RATIO (5%), the entire file
+        //    reverts to DATAFORMAT_RAW - no CompressedHeader/ChunkHeader at all.
+
+        private struct ChunkRec
+        {
+            public uint UncompressedSize, CompressedSize, ExtraBytes, Offset;
+        }
+
+        private struct CompressedFileResult
+        {
+            public ushort Format;              // DATAFORMAT_RAW or DATAFORMAT_ZLIB
+            public byte[] PhysicalBytes;        // what actually gets written to the data section
+            public List<ChunkRec> Chunks;       // empty when Format == RAW
+        }
+
+        private static byte[] ZlibDeflateOnce(byte[] src, int offset, int count)
+        {
+            using var ms = new MemoryStream();
+            using (var z = new ZLibStream(ms, CompressionLevel.Optimal, leaveOpen: true))
+                z.Write(src, offset, count);
+            return ms.ToArray();
+        }
+
+        private CompressedFileResult CompressFile(byte[] raw)
+        {
+            if (!Compress || raw.Length == 0)
+                return new CompressedFileResult { Format = DATAFORMAT_RAW, PhysicalBytes = raw, Chunks = new List<ChunkRec>() };
+
+            var chunks = new List<ChunkRec>();
+            using var physical = new MemoryStream();
+            uint runningOffset = 0;
+            int pos = 0;
+
+            while (pos < raw.Length)
+            {
+                int write = Math.Min(CHUNK_SIZE, raw.Length - pos);
+                uint overhead = (write < CHUNK_SIZE) ? 0u : STARTING_OVERHEAD;
+                int localWrite = write - (int)overhead;
+
+                byte[] compressed = ZlibDeflateOnce(raw, pos, localWrite);
+                uint outSize = (uint)compressed.Length;
+
+                bool fits = (overhead == 0) || (outSize + overhead < (uint)write);
+
+                byte[] tail;
+                if (!fits)
+                {
+                    // per-chunk fallback: store this chunk raw
+                    compressed = new byte[write];
+                    Array.Copy(raw, pos, compressed, 0, write);
+                    outSize = (uint)write;
+                    overhead = 0;
+                    tail = Array.Empty<byte>();
+                }
+                else
+                {
+                    tail = new byte[overhead];
+                    Array.Copy(raw, pos + localWrite, tail, 0, (int)overhead);
+                }
+
+                physical.Write(compressed, 0, compressed.Length);
+                physical.Write(tail, 0, tail.Length);
+
+                chunks.Add(new ChunkRec
+                {
+                    UncompressedSize = (uint)write,
+                    CompressedSize = outSize,
+                    ExtraBytes = overhead,
+                    Offset = runningOffset
+                });
+
+                runningOffset += outSize + overhead;
+                pos += write;
+            }
+
+            byte[] physicalBytes = physical.ToArray();
+
+            float ratio = 1f - ((float)physicalBytes.Length / raw.Length);
+            if (ratio < MIN_COMPRESSION_RATIO)
+                return new CompressedFileResult { Format = DATAFORMAT_RAW, PhysicalBytes = raw, Chunks = new List<ChunkRec>() };
+
+            return new CompressedFileResult { Format = DATAFORMAT_ZLIB, PhysicalBytes = physicalBytes, Chunks = chunks };
         }
 
         // ====================== BUILD TREE FROM DISK ======================
@@ -264,7 +411,7 @@ namespace DS2_Tank_Viewer
 
             // Flatten dirs (breadth-first is fine, order doesn't matter as long as
             // parent offsets are resolved before children reference them) and files
-            // (order also doesn't matter - FileEntry stores its own ParentOffset).
+            // (order also doesn't matter).
             var allDirs = new List<BuildDirEntry>();
             FlattenDirs(root, allDirs);
 
@@ -276,24 +423,34 @@ namespace DS2_Tank_Viewer
             using (var ms = new MemoryStream())
             {
                 // ---------- Pass 1: write DATA section, remember offsets ----------
-                var dataOffsets = new Dictionary<BuildFileEntry, (uint Offset, uint Size, uint Crc)>();
+                var fileMeta = new Dictionary<BuildFileEntry, (uint Offset, uint Size, uint Crc, ushort Format, List<ChunkRec> Chunks)>();
 
                 using (var dataStream = new MemoryStream())
                 using (var dataWriter = new BinaryWriter(dataStream))
                 {
+                    // Running CRC32 over each file's UNCOMPRESSED bytes, concatenated in
+                    // processing order (AddCRC32 is fed rawData, i.e. pre-compression bytes,
+                    // regardless of what's physically written to disk). Deliberately NOT the
+                    // same as Crc32(fullDataBytes) once compression makes those two diverge.
+                    uint dataCrcRunning = 0xFFFFFFFF;
+
                     foreach (var (dir, file) in allFiles)
                     {
-                        WriteAlignPad(dataStream, DATA_ALIGNMENT);
                         byte[] bytes = File.ReadAllBytes(file.SourcePath);
                         uint offset = (uint)dataStream.Position;
                         uint crc = Crc32(bytes);
-                        dataWriter.Write(bytes);
-                        dataOffsets[file] = (offset, (uint)bytes.Length, crc);
+
+                        foreach (byte b in bytes)
+                            dataCrcRunning = Crc32Table[(dataCrcRunning ^ b) & 0xFF] ^ (dataCrcRunning >> 8);
+
+                        var result = CompressFile(bytes);
+                        dataWriter.Write(result.PhysicalBytes);
+                        fileMeta[file] = (offset, (uint)bytes.Length, crc, result.Format, result.Chunks);
                     }
 
                     uint dataSectionSize = (uint)dataStream.Length;
                     byte[] fullDataBytes = dataStream.ToArray();
-                    uint dataCrc32 = Crc32(fullDataBytes);
+                    uint dataCrc32 = dataCrcRunning ^ 0xFFFFFFFF;
 
                     // ---------- Pass 2: assign DirSet offsets ----------
                     // DirSet layout: [count][offsets[count]] then DirEntry blobs back to back.
@@ -314,17 +471,20 @@ namespace DS2_Tank_Viewer
                     foreach (var (dir, file) in allFiles)
                     {
                         fileRelOffset[file] = fileCursor;
-                        fileCursor += MeasureFileEntry(file, dataOffsets[file].Size);
+                        fileCursor += MeasureFileEntry(file, fileMeta[file].Format, fileMeta[file].Chunks.Count);
                     }
                     uint fileSetSize = fileCursor;
 
                     // ---------- Compute section layout ----------
-                    // RAW layout: Header -> Data (aligned to DATA_SECTION_ALIGNMENT) -> DirSet -> FileSet
+                    // RAW layout
+                    //  Header sizes here are all already dword multiples
+                    //  so the extra align-up is a no-op in practice, but it's kept for
+                    //  correctness in case DescriptionText length ever isn't.)
                     uint headerSize = MeasureHeader();
-                    uint dataOffset = AlignUp(headerSize, DATA_SECTION_ALIGNMENT);
-                    uint dirSetOffset = dataOffset + dataSectionSize;
+                    uint dataOffset = AlignUp(headerSize + RAW_HEADER_PAD, 4);
+                    uint dirSetOffset = dataOffset + dataSectionSize + RAW_HEADER_PAD;
                     uint fileSetOffset = dirSetOffset + dirSetSize;
-                    uint indexSize = dirSetSize + fileSetSize; // header + all index data, per spec comment // headerSize +
+                    uint indexSize = dirSetSize + fileSetSize; // header NOT included
 
                     // ---------- Serialize DirSet + FileSet into a buffer so we can CRC it ----------
                     byte[] indexBytes;
@@ -341,14 +501,17 @@ namespace DS2_Tank_Viewer
                             idxWriter.Write((uint)(d.Dirs.Count + d.Files.Count));
                             WriteFileTime(idxWriter, d.LastWriteTimeUtc);
                             WriteNString(idxWriter, d.Name);
-                            // ChildOffsets: per TankStructure.h these are offsets to each child
-                            // (dirs AND files) so the reader can walk mixed children and range-test
-                            // against m_DirFirst/m_DirLast vs m_FileFirst/m_FileLast to tell them apart.
-                            foreach (var childDir in d.Dirs) idxWriter.Write(dirRelOffset[childDir]);
-                            foreach (var childFile in d.Files) idxWriter.Write(fileSetOffset - dirSetOffset + fileRelOffset[childFile]);
-                            // ^ NOTE: child offsets need to be comparable/usable the same way for dirs
-                            // and files. This needs verification against a real RTC-built tank - see
-                            // the flagged note at the bottom of my reply about ChildCount/ChildOffsets.
+                            // binary_search across
+                            // this array comparing names regardless of dir/file, so it MUST
+                            // be one merged case-insensitive alphabetical list - NOT all
+                            // dirs followed by all files.
+                            foreach (var child in MergeSortedChildren(d))
+                            {
+                                if (child.IsDir)
+                                    idxWriter.Write(dirRelOffset[child.Dir]);
+                                else
+                                    idxWriter.Write(fileSetOffset - dirSetOffset + fileRelOffset[child.File]);
+                            }
                         }
 
                         // FileSet
@@ -356,16 +519,34 @@ namespace DS2_Tank_Viewer
                         foreach (var (dir, file) in allFiles) idxWriter.Write(fileRelOffset[file]);
                         foreach (var (dir, file) in allFiles)
                         {
-                            var (offset, size, crc) = dataOffsets[file];
+                            var (offset, size, crc, format, chunks) = fileMeta[file];
                             idxWriter.Write(dirRelOffset[dir]);          // ParentOffset
-                            idxWriter.Write(size);                       // Size
+                            idxWriter.Write(size);                       // Size (uncompressed)
                             idxWriter.Write(offset);                     // Offset (relative to data section top)
-                            idxWriter.Write(crc);                        // CRC32
+                            idxWriter.Write(crc);                        // CRC32 (of uncompressed bytes)
                             WriteFileTime(idxWriter, file.LastWriteTimeUtc);
-                            idxWriter.Write(DATAFORMAT_RAW);             // Format - RAW for this first pass
+                            idxWriter.Write(format);                     // Format
                             idxWriter.Write(FILEFLAG_NONE);              // Flags
                             WriteNString(idxWriter, file.Name);
-                            // (no CompressedHeader - only present when Format != RAW)
+
+                            if (format != DATAFORMAT_RAW)
+                            {
+                                // CompressedHeader: total physical bytes (all chunks' compressed
+                                // data + their overhead tails combined), then the constant chunk
+                                // size used to split this file (always CHUNK_SIZE here - real RTC
+                                // output shows every compressed file carries this, even ones under
+                                // one chunk in size, rather than collapsing to 0).
+                                uint totalCompressedSize = (uint)chunks.Sum(c => (long)c.CompressedSize + c.ExtraBytes);
+                                idxWriter.Write(totalCompressedSize);
+                                idxWriter.Write((uint)CHUNK_SIZE);
+                                foreach (var c in chunks)
+                                {
+                                    idxWriter.Write(c.UncompressedSize);
+                                    idxWriter.Write(c.CompressedSize);
+                                    idxWriter.Write(c.ExtraBytes);
+                                    idxWriter.Write(c.Offset);
+                                }
+                            }
                         }
 
                         indexBytes = idxStream.ToArray();
@@ -375,7 +556,7 @@ namespace DS2_Tank_Viewer
 
                     if (SkipChecksums)
                     {
-                        // INVALID_CHECKSUM per TankStructure.h - tells the engine not to validate.
+                        // INVALID_CHECKSUM per TankStructure.h - tells the engine not to validate?
                         indexCrc32 = 0;
                         dataCrc32 = 0;
                     }
@@ -385,8 +566,11 @@ namespace DS2_Tank_Viewer
                     using (var w = new BinaryWriter(outFs))
                     {
                         WriteHeader(w, dirSetOffset, fileSetOffset, indexSize, dataOffset, indexCrc32, dataCrc32);
-                        WriteAlignPad(outFs, DATA_SECTION_ALIGNMENT);
+                        // pad up to dataOffset (RAW_HEADER_PAD(16) + dword-align)
+                        while (outFs.Position < dataOffset) outFs.WriteByte(0);
                         w.Write(fullDataBytes);
+                        // second RAW_HEADER_PAD(16) block before the index
+                        w.Write(new byte[RAW_HEADER_PAD]);
                         w.Write(indexBytes);
                     }
                 }
@@ -425,11 +609,52 @@ namespace DS2_Tank_Viewer
             return size;
         }
 
-        private uint MeasureFileEntry(BuildFileEntry f, uint dataSize)
+        private struct ChildRef
+        {
+            public bool IsDir;
+            public BuildDirEntry Dir;
+            public BuildFileEntry File;
+            public string Name => IsDir ? Dir.Name : File.Name;
+        }
+
+        /// <summary>
+        /// Merges a directory's subdirs and files into a single case-insensitive
+        /// alphabetical order. compare_no_case semantics.
+        /// d.Dirs and d.Files are already individually sorted (see PopulateDir), so
+        /// this is a standard two-pointer merge.
+        /// </summary>
+        private List<ChildRef> MergeSortedChildren(BuildDirEntry d)
+        {
+            var result = new List<ChildRef>(d.Dirs.Count + d.Files.Count);
+            int di = 0, fi = 0;
+            while (di < d.Dirs.Count || fi < d.Files.Count)
+            {
+                if (di >= d.Dirs.Count)
+                {
+                    result.Add(new ChildRef { IsDir = false, File = d.Files[fi++] });
+                }
+                else if (fi >= d.Files.Count)
+                {
+                    result.Add(new ChildRef { IsDir = true, Dir = d.Dirs[di++] });
+                }
+                else
+                {
+                    int cmp = string.Compare(d.Files[fi].Name, d.Dirs[di].Name, StringComparison.OrdinalIgnoreCase);
+                    if (cmp < 0)
+                        result.Add(new ChildRef { IsDir = false, File = d.Files[fi++] });
+                    else
+                        result.Add(new ChildRef { IsDir = true, Dir = d.Dirs[di++] });
+                }
+            }
+            return result;
+        }
+
+        private uint MeasureFileEntry(BuildFileEntry f, ushort format, int chunkCount)
         {
             uint size = 4 + 4 + 4 + 4 + 8 + 2 + 2; // Parent+Size+Offset+Crc+FileTime+Format+Flags
             size += MeasureNStringSize(f.Name);
-            // + CompressedHeader/ChunkHeader block once compression is added
+            if (format != DATAFORMAT_RAW)
+                size += 8 + (uint)(16 * chunkCount); // CompressedHeader(8) + ChunkHeader(16) each
             return size;
         }
 
@@ -479,7 +704,16 @@ namespace DS2_Tank_Viewer
             w.Write(ProductVersion.v1); w.Write(ProductVersion.v2); w.Write(ProductVersion.v3);
             w.Write(MinimumVersion.v1); w.Write(MinimumVersion.v2); w.Write(MinimumVersion.v3);
 
-            w.Write(Priority);
+            // RTC.exe's real output packs Priority as (PRIORITY_USER<<16)|minorPriority -
+            // a real user-built DS2 tank shows Priority = 0x40004000, not the plain
+            // 0x00004000 PRIORITY_USER constant, so this packing must happen in
+            // RTC.exe's own CLI/main() handling
+            // rather than confirmed from source. If a small/plain value is given
+            // (<= 0xFFFF, i.e. just a "minor priority", which is what Form1.cs's UI
+            // default of 0x4000 looks like), auto-pack it to match. Pass an already-full
+            // 32-bit value if you need exact control and don't want the auto-pack.
+            uint packedPriority = (Priority <= 0xFFFF) ? (0x40000000u | Priority) : Priority;
+            w.Write(packedPriority);
             w.Write(Flags);
 
             w.Write(CreatorId.c0); w.Write(CreatorId.c1); w.Write(CreatorId.c2); w.Write(CreatorId.c3);

@@ -32,6 +32,61 @@ namespace DS2_Tank_Viewer
         // Projects: key = project GUID, value = root folder path
         private readonly Dictionary<string, string> _projects = new();
 
+        // Per-project "Pack via RTC" form memory: key = normalized project root path
+        // (or "__generic__" for the toolbar Pack button that isn't tied to a project),
+        // value = last-used build info. Persisted to disk so it survives app restarts.
+        private Dictionary<string, BuildInfo> _buildInfo = new(StringComparer.OrdinalIgnoreCase);
+
+        private static string BuildInfoFilePath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "DS2TankEditor", "build_info.json");
+
+        private class BuildInfo
+        {
+            public string Source { get; set; } = "";
+            public string Out { get; set; } = "";
+            public string Title { get; set; } = "";
+            public string Author { get; set; } = "";
+            public string Copyright { get; set; } = "";
+            public string Build { get; set; } = "";
+            public string Priority { get; set; } = "0x4000";
+            public bool FlagDev { get; set; }
+            public bool FlagMpXfer { get; set; }
+            public bool FlagProtected { get; set; }
+            public bool FlagWait { get; set; }
+        }
+
+        private static string NormalizeBuildInfoKey(string key)
+            => string.IsNullOrWhiteSpace(key) ? "__generic__" : key.TrimEnd('\\', '/');
+
+        private void LoadBuildInfo()
+        {
+            try
+            {
+                if (File.Exists(BuildInfoFilePath))
+                {
+                    string json = File.ReadAllText(BuildInfoFilePath);
+                    var loaded = JsonSerializer.Deserialize<Dictionary<string, BuildInfo>>(json,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (loaded != null)
+                        _buildInfo = new Dictionary<string, BuildInfo>(loaded, StringComparer.OrdinalIgnoreCase);
+                }
+            }
+            catch { /* corrupt/missing file - start fresh */ }
+        }
+
+        private void SaveBuildInfoToDisk()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(BuildInfoFilePath);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                string json = JsonSerializer.Serialize(_buildInfo, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(BuildInfoFilePath, json);
+            }
+            catch { /* non-fatal - just means memory won't persist to next launch */ }
+        }
+
         // Text extensions we allow opening in the editor
         private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -44,6 +99,7 @@ namespace DS2_Tank_Viewer
         public DS2TankEditor()
         {
             InitializeComponent();
+            LoadBuildInfo();
             InitWebView();
         }
 
@@ -183,6 +239,13 @@ namespace DS2_Tank_Viewer
                     break;
                 case "browseOutFile":
                     HandleBrowseOutFile();
+                    break;
+                case "getBuildInfo":
+                    HandleGetBuildInfo(
+                        root.TryGetProperty("key", out var gbik) ? gbik.GetString() : null);
+                    break;
+                case "saveBuildInfo":
+                    HandleSaveBuildInfo(root);
                     break;
             }
         }
@@ -532,6 +595,59 @@ namespace DS2_Tank_Viewer
         }
 
         /// <summary>
+        /// Sends the last-remembered "Pack via RTC" form values for the given key
+        /// (project root path, or "__generic__") back to JS so the modal can be
+        /// prefilled instead of starting blank every time.
+        /// </summary>
+        private void HandleGetBuildInfo(string key)
+        {
+            string normKey = NormalizeBuildInfoKey(key);
+            if (_buildInfo.TryGetValue(normKey, out var info))
+            {
+                string json = JsonSerializer.Serialize(info,
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                JsCall($"window.ds2.setBuildInfo({J(normKey)},{json})");
+            }
+            else
+            {
+                JsCall($"window.ds2.setBuildInfo({J(normKey)},null)");
+            }
+        }
+
+        /// <summary>
+        /// Remembers the current "Pack via RTC" form values for the given key so
+        /// they're prefilled the next time this project's pack modal is opened -
+        /// even across app restarts.
+        /// </summary>
+        private void HandleSaveBuildInfo(JsonElement root)
+        {
+            try
+            {
+                string key = NormalizeBuildInfoKey(
+                    root.TryGetProperty("key", out var k) ? k.GetString() : null);
+
+                var info = new BuildInfo
+                {
+                    Source = root.TryGetProperty("source", out var s) ? s.GetString() ?? "" : "",
+                    Out = root.TryGetProperty("out", out var o) ? o.GetString() ?? "" : "",
+                    Title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "",
+                    Author = root.TryGetProperty("author", out var a) ? a.GetString() ?? "" : "",
+                    Copyright = root.TryGetProperty("copyright", out var c) ? c.GetString() ?? "" : "",
+                    Build = root.TryGetProperty("build", out var b) ? b.GetString() ?? "" : "",
+                    Priority = root.TryGetProperty("priority", out var p) ? p.GetString() ?? "0x4000" : "0x4000",
+                    FlagDev = root.TryGetProperty("flagDev", out var fd) && fd.GetBoolean(),
+                    FlagMpXfer = root.TryGetProperty("flagMpXfer", out var fm) && fm.GetBoolean(),
+                    FlagProtected = root.TryGetProperty("flagProtected", out var fp) && fp.GetBoolean(),
+                    FlagWait = root.TryGetProperty("flagWait", out var fw) && fw.GetBoolean(),
+                };
+
+                _buildInfo[key] = info;
+                SaveBuildInfoToDisk();
+            }
+            catch { /* best-effort - never let this break packing */ }
+        }
+
+        /// <summary>
         /// NEW build path: uses our own in-process TankWriter, no RTC.exe involved.
         /// Reads the same "createTankRtc" payload the UI already sends, so no JS
         /// changes are needed - only this handler and the toggle above differ.
@@ -589,13 +705,18 @@ namespace DS2_Tank_Viewer
                     BuildText = build ?? "",
                     Priority = priority,
                     Flags = flags,
-                    // ProductId defaults to "DSg2" (DS2) already - no PatchToDs2-style
-                    // post-processing needed, unlike the RTC.exe path.
+                    // TankWriter defaults to DS1-native values ("DSig" / HeaderVersion 1.0.2) -
+                    // the same as raw RTC.exe output - so TankWriter itself can still build real
+                    // DS1 .res/.map files untouched. This editor targets DS2, so we apply the
+                    // same PatchToDs2() used on the RTC.exe path below, after Build() completes.
                 };
 
                 JsCall("window.ds2.setProgress(50,'Packing files…')");
 
                 await Task.Run(() => writer.Build(sourceDir, outFile));
+
+                JsCall("window.ds2.setProgress(90,'Patching header for DS2…')");
+                PatchToDs2(outFile);
 
                 JsCall("window.ds2.setProgress(100,'Complete!')");
                 JsCall($"window.ds2.onRtcSuccess({J($"Tank created: {Path.GetFileName(outFile)}")})");
