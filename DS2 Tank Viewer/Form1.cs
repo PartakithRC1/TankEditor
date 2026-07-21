@@ -163,6 +163,15 @@ namespace DS2_Tank_Viewer
             return reader.ReadToEnd();
         }
 
+        private string GetEmbeddedHtml3()
+        {
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("DS2_Tank_Viewer.Resources.gas_interface_editor.html");
+            if (stream == null) return "<h1>HTML resource missing</h1>";
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+
         // ── Message Router (JS → C#) ─────────────────────────────────────────
 
         private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -886,6 +895,7 @@ namespace DS2_Tank_Viewer
             toolsToolStripMenuItem = new ToolStripMenuItem();
             editorToolStripMenuItem = new ToolStripMenuItem();
             gasRectResizerToolStripMenuItem = new ToolStripMenuItem();
+            gasInterfaceEditorToolStripMenuItem = new ToolStripMenuItem();
             menuStrip1.SuspendLayout();
             SuspendLayout();
             // 
@@ -900,7 +910,7 @@ namespace DS2_Tank_Viewer
             // 
             // toolsToolStripMenuItem
             // 
-            toolsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { editorToolStripMenuItem, gasRectResizerToolStripMenuItem });
+            toolsToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { editorToolStripMenuItem, gasRectResizerToolStripMenuItem, gasInterfaceEditorToolStripMenuItem });
             toolsToolStripMenuItem.Name = "toolsToolStripMenuItem";
             toolsToolStripMenuItem.Size = new Size(47, 20);
             toolsToolStripMenuItem.Text = "Tools";
@@ -918,6 +928,13 @@ namespace DS2_Tank_Viewer
             gasRectResizerToolStripMenuItem.Size = new Size(180, 22);
             gasRectResizerToolStripMenuItem.Text = "Gas Rect Resizer";
             gasRectResizerToolStripMenuItem.Click += gasRectResizerToolStripMenuItem_Click;
+            // 
+            // gasInterfaceEditorToolStripMenuItem
+            // 
+            gasInterfaceEditorToolStripMenuItem.Name = "gasInterfaceEditorToolStripMenuItem";
+            gasInterfaceEditorToolStripMenuItem.Size = new Size(180, 22);
+            gasInterfaceEditorToolStripMenuItem.Text = "Gas Interface Editor";
+            gasInterfaceEditorToolStripMenuItem.Click += gasInterfaceEditorToolStripMenuItem_Click;
             // 
             // DS2TankEditor
             // 
@@ -958,6 +975,18 @@ namespace DS2_Tank_Viewer
                 webView.CoreWebView2.Navigate("https://ds2app.local/ds2_gas_scaler.html");
             else
                 webView.CoreWebView2.NavigateToString(GetEmbeddedHtml2());
+        }
+
+        private ToolStripMenuItem gasInterfaceEditorToolStripMenuItem;
+
+        private void gasInterfaceEditorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory + "Resources\\", "gas_interface_editor.html");
+            if (File.Exists(htmlPath))
+                //webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                webView.CoreWebView2.Navigate("https://ds2app.local/gas_interface_editor.html");
+            else
+                webView.CoreWebView2.NavigateToString(GetEmbeddedHtml3());
         }
     }
 }
