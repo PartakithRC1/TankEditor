@@ -1,4 +1,4 @@
-The Tank Viewer/Creator reimagined into one new tool in C#. View and extract ds2res/ds2map files in C#! Pack your own projects into tanks too! Now all via C#. 
+The Tank Viewer/Creator reimagined into one new tool in C#. View and extract dsres/dsmap/ds2res/ds2map files in C#! Pack your own projects into tanks too! Now all via C#. 
 
 Update 1.1.0 released first update of the new environment to a full on editor. 
 
